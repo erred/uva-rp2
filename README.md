@@ -10,6 +10,7 @@ A repo for uva-rp2
 - [x] read RFCs
 - [x] find TURN libraries
 - [ ] find http/socks libraries
+- [ ] questions / scope
 - [ ] setup coturn
 - [ ] evaluate coturn turnutils
 - [ ] implement rfc6062?
@@ -33,6 +34,8 @@ A repo for uva-rp2
 - client uses TURN to request an Allocation on a TURN server (with authentication)
 - client keeps the allocation using Refresh (default 10min), and deletes when done (Refresh 0s)
 
+## Resources
+
 ### RFC
 
 key: **important**, ~~obseleted~~
@@ -45,12 +48,12 @@ key: **important**, ~~obseleted~~
 - [5928](https://tools.ietf.org/html/rfc5928) Traversal Using Relays around NAT (TURN) Resolution Mechanism
 - [6062](https://tools.ietf.org/html/rfc6062) **Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations**
 - [7350](https://tools.ietf.org/html/rfc7350) Datagram Transport Layer Security (DTLS) as Transport for Session Traversal Utilities for NAT (STUN)
-- [7478](https://tools.ietf.org/html/rfc7478) Web Real-Time Communication Use Cases and Requirements
-- [7742](https://tools.ietf.org/html/rfc7742) WebRTC Video Processing and Codec Requirements
 - [8155](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
 - [8445](https://tools.ietf.org/html/rfc8445) Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal
 
 ### Libraries
+
+#### STUN / TURN
 
 - [coturn/coturn](https://github.com/coturn/coturn) use turnutils?
 - [gortc/stun](https://github.com/gortc/stun)
@@ -58,8 +61,7 @@ key: **important**, ~~obseleted~~
 - [pion/ice](https://github.com/pion/ice)
 - [pion/stun](https://github.com/pion/stun)
 - [pion/turn](https://github.com/pion/turn) [#118](https://github.com/pion/turn/issues/118) RFC 6062 TURN-TCP not implemented, WIP branch [rfc-6062-client](https://github.com/pion/turn/tree/rfc-6062-client)
-- [pion/webrtc](https://github.com/pion/webrtc)
 
-### notes
+### Notes
 
 - rtsec [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
