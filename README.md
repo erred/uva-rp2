@@ -45,10 +45,10 @@ key: **important**, ~~obseleted~~
 
 - [coturn/coturn](https://github.com/coturn/coturn) use turnutils?
 - [gortc/stun](https://github.com/gortc/stun)
-- [gortc/turn](https://github.com/gortc/turn) gortc/turn#14 RFC 6062 TURN-TCP not implemented
+- [gortc/turn](https://github.com/gortc/turn) [#14](https://github.com/gortc/turn/issues/14) RFC 6062 TURN-TCP not implemented
 - [pion/ice](https://github.com/pion/ice)
-- [pion/stun](https://github.com/pion/stun) pion/turn#118 RFC 6062 TURN-TCP not implemented
-- [pion/turn](https://github.com/pion/turn)
+- [pion/stun](https://github.com/pion/stun)
+- [pion/turn](https://github.com/pion/turn) [#118](https://github.com/pion/turn/issues/118) RFC 6062 TURN-TCP not implemented, WIP branch [rfc-6062-client](https://github.com/pion/turn/tree/rfc-6062-client)
 - [pion/webrtc](https://github.com/pion/webrtc)
 
 ### notes
