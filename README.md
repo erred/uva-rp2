@@ -9,11 +9,25 @@ A repo for uva-rp2
 
 - [x] read RFCs
 - [x] find TURN libraries
-- [ ] find http/socks libraries
+- [x] setup coturn
+- [x] find http/socks libraries
 - [ ] questions / scope
-- [ ] setup coturn
+- [ ] write proposal
 - [ ] evaluate coturn turnutils
 - [ ] implement rfc6062?
+- [ ] identify "public" TURN servers
+
+### scoping
+
+- proxy protocol: socks5
+- implement rfc6062
+- angle research question?
+  - in-out or out-in?
+  - security? defense? attack?
+- repo public? license?
+- integration with something else? metasploit?
+- extract TURN auth?
+- socks 5 udp?
 
 ## Basics
 
@@ -62,6 +76,25 @@ key: **important**, ~~obseleted~~
 - [pion/stun](https://github.com/pion/stun)
 - [pion/turn](https://github.com/pion/turn) [#118](https://github.com/pion/turn/issues/118) RFC 6062 TURN-TCP not implemented, WIP branch [rfc-6062-client](https://github.com/pion/turn/tree/rfc-6062-client)
 
+#### Proxies
+
+- [armon/go-socks5](https://github.com/armon/go-socks5) SOCKS5
+- [cybozu-go/usocksd](https://github.com/cybozu-go/usocksd) SOCKS4/5
+- [fangdingjun/socks-go](https://github.com/fangdingjun/socks-go) SOCKS4/5
+- [h12w/socks](https://github.com/h12w/socks) SOCKS4/5
+
+- [net/http/httputil](https://golang.org/pkg/net/http/httputil) HTTP Reverse Proxy
+- [elazarl/goproxy](https://github.com/elazarl/goproxy) HTTP Proxy
+
 ### Notes
 
 - rtsec [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
+
+#### coturn
+
+- TURN port: 3478
+- TURN TLS port: 5349
+- min port: 49152
+- max port: 65535
+- user: turnpike
+- pass: turnpike
