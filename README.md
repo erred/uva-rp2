@@ -7,10 +7,13 @@ A repo for uva-rp2
 
 ## rfc
 
+- [~~3489~~](https://tools.ietf.org/html/rfc3489) STUN - Simple Traversal of User Datagram Protocol (UDP) Through Network Address Translators (NATs)
 - [5245](https://tools.ietf.org/html/rfc5245) Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal for Offer/Answer Protocols
 - [5389](https://tools.ietf.org/html/rfc5389) Session Traversal Utilities for NAT (STUN)
 - [5766](https://tools.ietf.org/html/rfc5766) Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)
+- [5928](https://tools.ietf.org/html/rfc5928) Traversal Using Relays around NAT (TURN) Resolution Mechanism
 - [6062](https://tools.ietf.org/html/rfc6062) Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations
+- [7350](https://tools.ietf.org/html/rfc7350) Datagram Transport Layer Security (DTLS) as Transport for Session Traversal Utilities for NAT (STUN)
 - [7478](https://tools.ietf.org/html/rfc7478) Web Real-Time Communication Use Cases and Requirements
 - [7742](https://tools.ietf.org/html/rfc7742) WebRTC Video Processing and Codec Requirements
 - [8166](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
