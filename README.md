@@ -7,7 +7,7 @@ A repo for uva-rp2
 
 ## Basics
 
-### keywords
+### Keywords
 
 - ICE: complete framework for NAT traversal
 - STUN (RFC 5389): request / response of reflexive transport address (public host:port of client after NAT)
@@ -18,13 +18,13 @@ A repo for uva-rp2
 - TURN Channel: low overhead version of Send/Data, 10min refresh
 - TURN TCP: uses separate control / data connections for tcp, same refresh
 
-### concepts
+### Concepts
 
 - client uses STUN to find it's publicly reachable address from a STUN server
 - client uses TURN to request an Allocation on a TURN server (with authentication)
 - client keeps the allocation using Refresh (default 10min), and deletes when done (Refresh 0s)
 
-## RFC
+### RFC
 
 key: **important**, ~~obseleted~~
 
@@ -41,7 +41,21 @@ key: **important**, ~~obseleted~~
 - [8155](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
 - [8445](https://tools.ietf.org/html/rfc8445) Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal
 
-## servers
+### Libraries
+
+- [coturn/coturn](https://github.com/coturn/coturn) use turnutils?
+- [gortc/stun](https://github.com/gortc/stun)
+- [gortc/turn](https://github.com/gortc/turn) gortc/turn#14 RFC 6062 TURN-TCP not implemented
+- [pion/ice](https://github.com/pion/ice)
+- [pion/stun](https://github.com/pion/stun) pion/turn#118 RFC 6062 TURN-TCP not implemented
+- [pion/turn](https://github.com/pion/turn)
+- [pion/webrtc](https://github.com/pion/webrtc)
+
+### notes
+
+- rtsec [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
+
+## Data
 
 ### STUN
 
