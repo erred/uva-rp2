@@ -5,20 +5,40 @@ A repo for uva-rp2
 [![License](https://img.shields.io/github/license/seankhliao/uva-rp2.svg?style=flat-square)](LICENSE)
 ![Version](https://img.shields.io/github/v/tag/seankhliao/uva-rp2?sort=semver&style=flat-square)
 
-## rfc
+## Basics
 
-~~obseleted~~
+### keywords
+
+- ICE: complete framework for NAT traversal
+- STUN (RFC 5389): request / response of reflexive transport address (public host:port of client after NAT)
+- TURN (RFC 5766): relay data when direct p2p is unavailable
+- TURN Allocation: port on server for use by client, 10min refresh
+- TURN Permissions: server allowed peer, 5min refresh
+- TURN Send/Data: basic send/recv
+- TURN Channel: low overhead version of Send/Data, 10min refresh
+- TURN TCP: uses separate control / data connections for tcp, same refresh
+
+### concepts
+
+- client uses STUN to find it's publicly reachable address from a STUN server
+- client uses TURN to request an Allocation on a TURN server (with authentication)
+- client keeps the allocation using Refresh (default 10min), and deletes when done (Refresh 0s)
+
+## RFC
+
+key: **important**, ~~obseleted~~
 
 - [3489](https://tools.ietf.org/html/rfc3489) ~~STUN - Simple Traversal of User Datagram Protocol (UDP) Through Network Address Translators (NATs)~~
+- [5128](https://tools.ietf.org/html/rfc5128) State of Peer-to-Peer (P2P) Communication across Network Address Translators (NATs)
 - [5245](https://tools.ietf.org/html/rfc5245) ~~Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal for Offer/Answer Protocols~~
-- [5389](https://tools.ietf.org/html/rfc5389) Session Traversal Utilities for NAT (STUN)
-- [5766](https://tools.ietf.org/html/rfc5766) Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)
+- [5389](https://tools.ietf.org/html/rfc5389) **Session Traversal Utilities for NAT (STUN)**
+- [5766](https://tools.ietf.org/html/rfc5766) **Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)**
 - [5928](https://tools.ietf.org/html/rfc5928) Traversal Using Relays around NAT (TURN) Resolution Mechanism
-- [6062](https://tools.ietf.org/html/rfc6062) Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations
+- [6062](https://tools.ietf.org/html/rfc6062) **Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations**
 - [7350](https://tools.ietf.org/html/rfc7350) Datagram Transport Layer Security (DTLS) as Transport for Session Traversal Utilities for NAT (STUN)
 - [7478](https://tools.ietf.org/html/rfc7478) Web Real-Time Communication Use Cases and Requirements
 - [7742](https://tools.ietf.org/html/rfc7742) WebRTC Video Processing and Codec Requirements
-- [8166](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
+- [8155](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
 - [8445](https://tools.ietf.org/html/rfc8445) Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal
 
 ## servers
