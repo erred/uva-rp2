@@ -11,9 +11,9 @@ A repo for uva-rp2
 - [x] find TURN libraries
 - [x] setup coturn
 - [x] find http/socks libraries
-- [ ] questions / scope
-- [ ] write proposal
-- [ ] evaluate coturn turnutils
+- [x] questions / scope
+- [x] write proposal
+- [x] evaluate coturn turnutils
 - [ ] implement rfc6062?
 - [ ] identify "public" TURN servers
 
@@ -54,14 +54,19 @@ A repo for uva-rp2
 
 key: **important**, ~~obseleted~~
 
+- [1928](https://tools.ietf.org/html/rfc1928) SOCKS Protocol Version 5
 - [3489](https://tools.ietf.org/html/rfc3489) ~~STUN - Simple Traversal of User Datagram Protocol (UDP) Through Network Address Translators (NATs)~~
 - [5128](https://tools.ietf.org/html/rfc5128) State of Peer-to-Peer (P2P) Communication across Network Address Translators (NATs)
 - [5245](https://tools.ietf.org/html/rfc5245) ~~Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal for Offer/Answer Protocols~~
 - [5389](https://tools.ietf.org/html/rfc5389) **Session Traversal Utilities for NAT (STUN)**
 - [5766](https://tools.ietf.org/html/rfc5766) **Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)**
+- [5769](https://tools.ietf.org/html/rfc5769) Test Vectors for Session Traversal Utilities for NAT (STUN)
+- [5780](https://tools.ietf.org/html/rfc5780) NAT Behavior Discovery Using Session Traversal Utilities for NAT (STUN)
 - [5928](https://tools.ietf.org/html/rfc5928) Traversal Using Relays around NAT (TURN) Resolution Mechanism
 - [6062](https://tools.ietf.org/html/rfc6062) **Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations**
+- [7065](https://tools.ietf.org/html/rfc7065) Traversal Using Relays around NAT (TURN) Uniform Resource Identifiers
 - [7350](https://tools.ietf.org/html/rfc7350) Datagram Transport Layer Security (DTLS) as Transport for Session Traversal Utilities for NAT (STUN)
+- [7376](https://tools.ietf.org/html/rfc7376) Problems with Session Traversal Utilities for NAT (STUN) Long-Term Authentication for Traversal Using Relays around NAT (TURN)
 - [8155](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
 - [8445](https://tools.ietf.org/html/rfc8445) Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal
 
@@ -81,14 +86,13 @@ key: **important**, ~~obseleted~~
 - [armon/go-socks5](https://github.com/armon/go-socks5) SOCKS5
 - [cybozu-go/usocksd](https://github.com/cybozu-go/usocksd) SOCKS4/5
 - [fangdingjun/socks-go](https://github.com/fangdingjun/socks-go) SOCKS4/5
-- [h12w/socks](https://github.com/h12w/socks) SOCKS4/5
 
 - [net/http/httputil](https://golang.org/pkg/net/http/httputil) HTTP Reverse Proxy
 - [elazarl/goproxy](https://github.com/elazarl/goproxy) HTTP Proxy
 
 ### Notes
 
-- rtsec [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
+- Enable Security [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
 
 #### coturn
 
