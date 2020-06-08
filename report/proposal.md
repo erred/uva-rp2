@@ -30,11 +30,17 @@ Using these TURN relays as generic proxies could punch through firewalls for a w
 
 The goal of this research is to produce a translation layer acting as a SOCKS server and TURN client,
 handling protocol translations and the TURN protocol's permissions system,
-offering a way to leverage TURN relays as proxies for a wide range of existing tools.
+offering a way to leverage TURN relays as proxies for a wide range of existing tools,
+many of which only understand SOCKS.
 
 - How can the translation layer be implemented?
+  As a forwarding proxy and using the TURN relay to make arbitrary connections,
+  and/or as a reverse shell using the TURN relay as a known whitelisted endpoint.
 - What are the applications and limitations of the translation layer?
 - What can be done by firewalls and TURN relays to prevent abuse of proxying?
+  For operators of TURN relays this means its use as an "open" proxy beyond the original planned scope,
+  typically SIP or WebRTC, and for firewall operators this means its use in bypassing any controls
+  the firewall was intended to enforce.
 
 ## Related Work
 
@@ -63,6 +69,15 @@ for implementing TCP support if necessary.
 Once a translation layer has been complete,
 end to end tests can be run to identify issues
 and try out ideas for detection and control.
+
+## Ethics
+
+Development and testing will be run primarily against against a self hosted instance of coturn.
+For validation, running a proxy relayed through a third party TURN relay
+should not consume outsized resources compared to their usual load of audio/video traffic.
+Should any misconfiguration or other vulnerabilities be discovered during validation,
+responsible disclosure will be handled by the supervisor (Cedric van Bockhaven <CvanBockhaven@deloitte.nl>)
+at Deloitte.
 
 ## References
 
