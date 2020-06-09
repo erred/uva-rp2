@@ -18,12 +18,21 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		conn, err := c.Dial("udp", "145.100.104.117:5678")
+		conn, err := c.Dial("udp", "145.100.104.122:5678")
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		buf := make([]byte, 1000)
+		go func() {
+			for {
+				n, err := conn.Read(buf)
+				if err != nil {
+					log.Fatal(err)
+				}
+				fmt.Printf("%s -> %s %s\n", conn.RemoteAddr().String(), conn.LocalAddr().String(), buf[:n])
+			}
+		}()
 		for {
 			time.Sleep(time.Second)
 			_, err = conn.Write([]byte(time.Now().String() + " ping"))
@@ -31,11 +40,6 @@ func main() {
 				log.Fatal(err)
 			}
 
-			n, err := conn.Read(buf)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Printf("%s -> %s %s\n", conn.RemoteAddr().String(), conn.LocalAddr().String(), buf[:n])
 		}
 
 	case "pong":
@@ -53,7 +57,7 @@ func main() {
 
 			fmt.Printf("%s -> %s %s\n", addr.String(), c.LocalAddr().String(), buf[:n])
 
-			_, err = c.WriteTo([]byte(time.Now().String()+"pong"), addr)
+			_, err = c.WriteTo([]byte(time.Now().String()+" pong"), addr)
 			if err != nil {
 				log.Fatal(err)
 			}

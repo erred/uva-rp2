@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,8 @@ import (
 
 type ForwardProxy struct {
 	Proxy
+
+	server *socks5.Server
 
 	// udp
 	once   sync.Once
@@ -29,12 +32,14 @@ func NewForwardProxy(p *Proxy) *ForwardProxy {
 }
 
 func (f *ForwardProxy) Run() error {
-	s, err := socksServer(f.Proxy.socksAddress)
+	var err error
+	f.server, err = socksServer(f.Proxy.socksAddress)
 	if err != nil {
 		return fmt.Errorf("forward: %w", err)
 	}
+	fmt.Printf("SOCKS5 server started on tcp/%s udp/%s\n", f.server.TCPAddr.String(), f.server.UDPAddr.String())
 
-	err = s.ListenAndServe(f)
+	err = f.server.ListenAndServe(f)
 	if err != nil {
 		return fmt.Errorf("forward: %w", err)
 	}
@@ -97,9 +102,23 @@ func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.
 		if err != nil {
 			log.Fatalf("connect udp client allocate: %v", err)
 		}
+		mapped, err := client.SendBindingRequest()
+		if err != nil {
+			log.Fatalf("connect udp client binding: %v", err)
+		}
+		fmt.Printf("TURN mapped %s/%s -> %s/%s\n",
+			mapped.Network(), mapped.String(),
+			f.uconn.LocalAddr().Network(), f.uconn.LocalAddr().String())
+
+		go f.HandleIncoming()
 	})
 
-	c, ok := f.Get(addr.String())
+	ua, err := net.ResolveUDPAddr("udp", d.Address())
+	if err != nil {
+		return fmt.Errorf("handle udp resolve addr: %w", err)
+	}
+
+	c, ok := f.Get(ua.String())
 	if ok {
 		c.Write(d.Bytes())
 		return nil
@@ -107,12 +126,14 @@ func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.
 
 	nc := UDPConn{
 		addr,
+		ua,
 		f.uconn,
-		make(chan []byte, 10),
 	}
+	f.Add(ua.String(), nc)
+	nc.Write(d.Bytes())
 
-	f.Add(addr.String(), nc)
-
+	fmt.Printf("Handling %s/%s -> %s/%s\n",
+		addr.Network(), addr.String(), ua.Network(), ua.String())
 	return nil
 }
 
@@ -135,38 +156,37 @@ func (f *ForwardProxy) HandleIncoming() {
 		n, from, err := f.uconn.ReadFrom(buf)
 		if err != nil {
 			log.Println("handleIncoming read ", err)
-			return
 		}
 
 		f.mu.Lock()
 		c, ok := f.uconns[from.String()]
 		f.mu.Unlock()
 		if ok {
-			select {
-			case c.read <- buf[:n]:
-			default:
-				// drop excess
+			a, addr, port, err := socks5.ParseAddress(c.local.String())
+			if err != nil {
+				log.Println("handleIncoming parse addr: ", err)
 			}
+
+			d := socks5.NewDatagram(a, addr, port, buf[:n])
+			f.server.UDPConn.WriteToUDP(d.Bytes(), c.local)
 		}
 	}
 }
 
 type UDPConn struct {
-	net.Addr
-	net.PacketConn
-	read chan []byte
+	local  *net.UDPAddr
+	remote *net.UDPAddr
+	relay  net.PacketConn
 }
 
 func (c *UDPConn) Read(p []byte) (int, error) {
-	b := <-c.read
-	copy(p, b)
-	return len(b), nil
+	return 0, errors.New("unimplemented UDPConn.Read")
 }
 
 func (c *UDPConn) RemoteAddr() net.Addr {
-	return c.Addr
+	return c.remote
 }
 
 func (c *UDPConn) Write(p []byte) (int, error) {
-	return c.PacketConn.WriteTo(p, c.Addr)
+	return c.relay.WriteTo(p, c.remote)
 }
