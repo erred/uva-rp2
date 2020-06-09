@@ -57,6 +57,10 @@ func (r *ReverseServer) handleUDP() {
 		return
 	}
 
+	fmt.Printf("Waiting on %s/%s\n",
+		r.uconn.LocalAddr().Network(), r.uconn.LocalAddr().String(),
+	)
+
 	for {
 		buf := make([]byte, 65536)
 		n, from, err := r.uconn.ReadFromUDP(buf)
@@ -86,8 +90,8 @@ func (r *ReverseServer) handleUDP() {
 		}
 
 		fmt.Printf("Handle %s/%s -> %s/%s with msg %s\n",
-			from.Network(), from.String(),
 			nc.LocalAddr().Network(), nc.LocalAddr().String(),
+			from.Network(), from.String(),
 			string(buf[:n]),
 		)
 
@@ -107,12 +111,12 @@ func (r *ReverseServer) localToRelay(conn *net.UDPConn, addr *net.UDPAddr) {
 	for {
 		n, _, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			r.errc <- fmt.Errorf("reverseToRelay read: %w", err)
+			r.errc <- fmt.Errorf("localToRelay read: %w", err)
 			return
 		}
 		_, err = r.uconn.WriteToUDP(buf[:n], addr)
 		if err != nil {
-			r.errc <- fmt.Errorf("reverseToRelay write: %w", err)
+			r.errc <- fmt.Errorf("localToRelay write: %w", err)
 			return
 		}
 	}

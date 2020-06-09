@@ -1,24 +1,29 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"time"
 
 	"github.com/txthinking/socks5"
 )
 
 func main() {
-	switch os.Args[1] {
+	var socks, pong string
+	flag.StringVar(&socks, "socks", "127.0.0.1:1080", "SOCKS server address")
+	flag.StringVar(&pong, "pong", "104.196.203.254:5678", "pong server address")
+
+	flag.Parse()
+
+	switch flag.Arg(0) {
 	case "ping":
-		// c, err := socks5.NewClient("145.100.104.117:1080", "", "", 60, 0, 60)
-		c, err := socks5.NewClient("127.0.0.1:1080", "", "", 60, 0, 60)
+		c, err := socks5.NewClient(socks, "", "", 60, 0, 60)
 		if err != nil {
 			log.Fatal(err)
 		}
-		conn, err := c.Dial("udp", "145.100.104.122:5678")
+		conn, err := c.Dial("udp4", pong)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -43,7 +48,7 @@ func main() {
 		}
 
 	case "pong":
-		c, err := net.ListenPacket("udp4", "0.0.0.0:5678")
+		c, err := net.ListenPacket("udp4", ":5678")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -63,14 +68,14 @@ func main() {
 			}
 		}
 
-	case "socks":
-		s, err := socks5.NewClassicServer("145.100.104.117:1080", "145.100.104.117", "", "", 60, 0, 60, 60)
-		if err != nil {
-			log.Fatal("sock5 server", err)
-		}
-		err = s.ListenAndServe(nil)
-		if err != nil {
-			log.Fatal("sock5 server", err)
-		}
+		// case "socks":
+		// 	s, err := socks5.NewClassicServer("145.100.104.117:1080", "145.100.104.117", "", "", 60, 0, 60, 60)
+		// 	if err != nil {
+		// 		log.Fatal("sock5 server", err)
+		// 	}
+		// 	err = s.ListenAndServe(nil)
+		// 	if err != nil {
+		// 		log.Fatal("sock5 server", err)
+		// 	}
 	}
 }

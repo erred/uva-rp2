@@ -29,7 +29,7 @@ func main() {
 	flag.StringVar(&p.socksAddress, "socksAddress", "127.0.0.1:1080", "(forward mode) SOCKS5 host:port")
 
 	// reverse
-	flag.StringVar(&p.reverseAddress, "reverseAddress", "145.100.104.117:6789", "(reverse) address of reverse-server")
+	flag.StringVar(&p.reverseAddress, "reverseAddress", "145.100.104.122:6789", "(reverse) address of reverse-server")
 	flag.StringVar(&p.msg, "msg", "hello world", "message in hello messsage")
 
 	// reverse-client
@@ -132,11 +132,11 @@ func socksServer(addr string) (*socks5.Server, error) {
 }
 
 func udpConn(addr string) (*net.UDPConn, error) {
-	ua, err := net.ResolveUDPAddr("udp", addr)
+	ua, err := net.ResolveUDPAddr("udp4", addr)
 	if err != nil {
 		return nil, fmt.Errorf("udpConn addr: %w", err)
 	}
-	uc, err := net.ListenUDP("udp", ua)
+	uc, err := net.ListenUDP("udp4", ua)
 	if err != nil {
 		return nil, fmt.Errorf("udpConn listen: %w", err)
 	}

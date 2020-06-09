@@ -96,7 +96,7 @@ func (f *ForwardProxy) dialTCP(addr string) (net.Conn, error) {
 func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datagram) error {
 	f.uonce.Do(f.initUDP)
 
-	ua, err := net.ResolveUDPAddr("udp", d.Address())
+	ua, err := net.ResolveUDPAddr("udp4", d.Address())
 	if err != nil {
 		return fmt.Errorf("UDPHandle resolve: %w", err)
 	}

@@ -23,6 +23,8 @@ type ReverseClient struct {
 
 func NewReverseClient(p *Proxy) *ReverseClient {
 	return &ReverseClient{
+		Proxy: *p,
+
 		errc: make(chan error),
 	}
 }
@@ -91,14 +93,14 @@ func (r *ReverseClient) handleUDP() {
 			r.errc <- fmt.Errorf("handleUDP datagram: %w", err)
 			return
 		}
-		ua, err := net.ResolveUDPAddr("udp", d.Address())
+		ua, err := net.ResolveUDPAddr("udp4", d.Address())
 		if err != nil {
 			r.errc <- fmt.Errorf("handleUDP resolve: %w", err)
 			return
 		}
 
 		if dst == nil {
-			dst, err = net.DialUDP("udp", nil, ua)
+			dst, err = net.DialUDP("udp4", nil, ua)
 			if err != nil {
 				r.errc <- fmt.Errorf("handleUDP dial: %w", err)
 				return
@@ -124,7 +126,7 @@ func (r *ReverseClient) handleUDP() {
 func (r *ReverseClient) localToRelay(conn *net.UDPConn, remote net.Addr) {
 	defer r.wg.Done()
 
-	dstAddr, err := net.ResolveUDPAddr("udp", remote.String())
+	dstAddr, err := net.ResolveUDPAddr("udp4", remote.String())
 	if err != nil {
 		r.errc <- fmt.Errorf("localToRelay resolve: %w", err)
 		return
