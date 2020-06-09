@@ -8,7 +8,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/pion/turn/v2"
 	"github.com/txthinking/socks5"
 )
 
@@ -37,7 +36,9 @@ func (f *ForwardProxy) Run() error {
 	if err != nil {
 		return fmt.Errorf("forward: %w", err)
 	}
-	fmt.Printf("SOCKS5 server started on tcp/%s udp/%s\n", f.server.TCPAddr.String(), f.server.UDPAddr.String())
+	fmt.Printf("SOCKS5 listening tcp/%s udp/%s\n",
+		f.server.TCPAddr.String(), f.server.UDPAddr.String(),
+	)
 
 	err = f.server.ListenAndServe(f)
 	if err != nil {
@@ -78,37 +79,11 @@ func (f *ForwardProxy) DialTCP(addr string) (net.Conn, error) {
 
 func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datagram) error {
 	f.once.Do(func() {
-		turnIn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		var err error
+		f.uconn, _, err = f.Proxy.connectUDP()
 		if err != nil {
-			log.Fatalf("connect udp listen: %v", err)
+			log.Fatal("handle udp: ", err)
 		}
-		turnConfig := &turn.ClientConfig{
-			STUNServerAddr: f.Proxy.turnAddress,
-			TURNServerAddr: f.Proxy.turnAddress,
-			Conn:           turnIn,
-			Username:       f.Proxy.turnUser,
-			Password:       f.Proxy.turnPass,
-		}
-
-		client, err := turn.NewClient(turnConfig)
-		if err != nil {
-			log.Fatalf("connect udp turn client: %v", err)
-		}
-		err = client.Listen()
-		if err != nil {
-			log.Fatalf("connect udp client listen: %v", err)
-		}
-		f.uconn, err = client.Allocate()
-		if err != nil {
-			log.Fatalf("connect udp client allocate: %v", err)
-		}
-		mapped, err := client.SendBindingRequest()
-		if err != nil {
-			log.Fatalf("connect udp client binding: %v", err)
-		}
-		fmt.Printf("TURN mapped %s/%s -> %s/%s\n",
-			mapped.Network(), mapped.String(),
-			f.uconn.LocalAddr().Network(), f.uconn.LocalAddr().String())
 
 		go f.HandleIncoming()
 	})
@@ -133,7 +108,8 @@ func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.
 	nc.Write(d.Bytes())
 
 	fmt.Printf("Handling %s/%s -> %s/%s\n",
-		addr.Network(), addr.String(), ua.Network(), ua.String())
+		addr.Network(), addr.String(), ua.Network(), ua.String(),
+	)
 	return nil
 }
 

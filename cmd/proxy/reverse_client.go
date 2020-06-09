@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 
-	"github.com/pion/turn/v2"
 	"github.com/txthinking/socks5"
 )
 
@@ -52,49 +52,31 @@ func (r *ReverseClient) ConnectTCP() error {
 }
 
 func (r *ReverseClient) ConnectUDP() error {
-	turnIn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	var err error
+	r.uconn, _, err = r.Proxy.connectUDP()
 	if err != nil {
-		return fmt.Errorf("connect udp listen: %w", err)
-	}
-	turnConfig := &turn.ClientConfig{
-		STUNServerAddr: r.Proxy.turnAddress,
-		TURNServerAddr: r.Proxy.turnAddress,
-		Conn:           turnIn,
-		Username:       r.Proxy.turnUser,
-		Password:       r.Proxy.turnPass,
+		return fmt.Errorf("connect udp: %w", err)
 	}
 
-	client, err := turn.NewClient(turnConfig)
-	if err != nil {
-		return fmt.Errorf("connect udp turn client: %w", err)
-	}
-	err = client.Listen()
-	if err != nil {
-		return fmt.Errorf("connect udp client listen: %w", err)
-	}
-	relayConn, err := client.Allocate()
-	if err != nil {
-		return fmt.Errorf("connect udp client allocate: %w", err)
-	}
+	go r.handleUDP()
 
 	ua, err := net.ResolveUDPAddr("udp4", r.Proxy.reverseAddress)
 	if err != nil {
 		return fmt.Errorf("connect udp resolve addr: %w", err)
 	}
-	_, err = relayConn.WriteTo([]byte(r.Proxy.msg), ua)
+	_, err = r.uconn.WriteTo([]byte(r.Proxy.msg), ua)
 	if err != nil {
 		return fmt.Errorf("connect udp send hello: %w", err)
 	}
-
-	r.uconn = relayConn
-	go r.handleUDP()
 
 	return nil
 }
 
 func (r *ReverseClient) handleUDP() {
+	var dst *net.UDPConn
+
+	buf := make([]byte, 65536)
 	for {
-		buf := make([]byte, 65536)
 		n, from, err := r.uconn.ReadFrom(buf)
 		if err != nil {
 			r.errc <- fmt.Errorf("handle udp read: %w", err)
@@ -106,14 +88,50 @@ func (r *ReverseClient) handleUDP() {
 			r.errc <- fmt.Errorf("handle udp datagram: %w", err)
 			return
 		}
-		// if d.Frag != 0x00 {
-		// 	r.errc <- fmt.Errorf("Ignore frag", d.Frag)
-		// 	return
-		// }
-		err = r.server.Handle.UDPHandle(r.server, from.(*net.UDPAddr), d)
+		ua, err := net.ResolveUDPAddr("udp", d.Address())
 		if err != nil {
-			r.errc <- fmt.Errorf("handle udp handle: %w", err)
-			return
+			log.Fatal("handle udp resolve addr: ", err)
 		}
+
+		if dst == nil {
+			dst, err = net.DialUDP("udp", nil, ua)
+			if err != nil {
+				log.Fatal("handle udp dial: ", err)
+			}
+
+			fmt.Printf("Handle %s/%s -> %s/%s\n",
+				from.Network(), from.String(), ua.Network(), ua.String(),
+			)
+
+			go func() {
+				dstAddr, err := net.ResolveUDPAddr("udp", from.String())
+				if err != nil {
+					log.Fatal("handle udp resolve: ", err)
+				}
+				a, addr, port, err := socks5.ParseAddress(dstAddr.String())
+				if err != nil {
+					log.Fatal("handle udp parse addr: ", err)
+				}
+				buf := make([]byte, 65536)
+				for {
+					n, _, err := dst.ReadFromUDP(buf)
+					if err != nil {
+						log.Fatal("handle udp read dst: ", err)
+					}
+
+					d := socks5.NewDatagram(a, addr, port, buf[:n])
+					_, err = dst.WriteToUDP(d.Bytes(), dstAddr)
+					if err != nil {
+						log.Fatal("handle udp write: ", err)
+					}
+				}
+			}()
+		}
+
+		_, err = dst.WriteToUDP(d.Data, ua)
+		if err != nil {
+			log.Fatal("handle udp write dst: ", err)
+		}
+
 	}
 }

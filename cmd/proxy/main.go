@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/pion/turn/v2"
 	"github.com/txthinking/socks5"
 )
 
@@ -81,6 +82,43 @@ type Proxy struct {
 	// reverse-server
 	localPort    int
 	localAddress string
+}
+
+func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
+	turnIn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect udp listen: %w", err)
+	}
+	turnConfig := &turn.ClientConfig{
+		STUNServerAddr: p.turnAddress,
+		TURNServerAddr: p.turnAddress,
+		Conn:           turnIn,
+		Username:       p.turnUser,
+		Password:       p.turnPass,
+	}
+
+	client, err := turn.NewClient(turnConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect udp turn client: %w", err)
+	}
+	err = client.Listen()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect udp client listen: %w", err)
+	}
+	relayConn, err := client.Allocate()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect udp client allocate: %w", err)
+	}
+	mapped, err := client.SendBindingRequest()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect udp client binding: %w", err)
+	}
+
+	fmt.Printf("TURN mapped %s/%s -> %s/%s\n",
+		mapped.Network(), mapped.String(),
+		relayConn.LocalAddr().Network(), relayConn.LocalAddr().String(),
+	)
+	return relayConn, mapped, nil
 }
 
 func socksServer(addr string) (*socks5.Server, error) {
