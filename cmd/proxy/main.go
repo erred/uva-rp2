@@ -40,22 +40,20 @@ func main() {
 
 	flag.Parse()
 
-	var run runner
 	switch p.mode {
 	case "forward":
-		run = NewForwardProxy(p)
+		NewForwardProxy(p).Run()
 	case "reverse-client":
-		run = NewReverseClient(p)
+		NewReverseClient(p).Run()
 	case "reverse-server":
-		run = NewReverseServer(p)
+		NewReverseServer(p).Run()
 	default:
 		log.Fatalf("unknown mode %q", p.mode)
 	}
-	log.Println(run.Run())
 }
 
 type runner interface {
-	Run() error
+	Run()
 }
 
 type Proxy struct {
@@ -131,4 +129,22 @@ func socksServer(addr string) (*socks5.Server, error) {
 		return nil, fmt.Errorf("create socks servers: %w", err)
 	}
 	return s, nil
+}
+
+func udpConn(addr string) (*net.UDPConn, error) {
+	ua, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("udpConn addr: %w", err)
+	}
+	uc, err := net.ListenUDP("udp", ua)
+	if err != nil {
+		return nil, fmt.Errorf("udpConn listen: %w", err)
+	}
+	return uc, nil
+}
+
+func errorPrinter(prefix string, errc chan error) {
+	for err := range errc {
+		log.Printf("%s: %v", prefix, err)
+	}
 }
