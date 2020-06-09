@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-
-	"github.com/txthinking/socks5"
 )
 
 type ReverseClient struct {
@@ -19,6 +17,7 @@ type ReverseClient struct {
 
 	// udp
 	uconn net.PacketConn
+	lconn *net.UDPConn
 }
 
 func NewReverseClient(p *Proxy) *ReverseClient {
@@ -61,15 +60,26 @@ func (r *ReverseClient) connectUDP() {
 		return
 	}
 
+	r.lconn, err = udpConn("0.0.0.0:0")
+	if err != nil {
+
+	}
+
 	r.wg.Add(1)
 	go r.handleUDP()
+	r.wg.Add(1)
+	go r.localToRelay()
 
 	ua, err := net.ResolveUDPAddr("udp4", r.Proxy.reverseAddress)
 	if err != nil {
 		r.errc <- fmt.Errorf("connectUDP resolve: %w", err)
 		return
 	}
-	_, err = r.uconn.WriteTo([]byte(r.Proxy.msg), ua)
+
+	zero := make([]byte, len(r.Proxy.msg)+6)
+	copy(zero[6:], r.Proxy.msg)
+
+	_, err = r.uconn.WriteTo(zero, ua)
 	if err != nil {
 		r.errc <- fmt.Errorf("connectUDP hello: %w", err)
 		return
@@ -79,75 +89,45 @@ func (r *ReverseClient) connectUDP() {
 func (r *ReverseClient) handleUDP() {
 	defer r.wg.Done()
 
-	var dst *net.UDPConn
 	buf := make([]byte, 65536)
 	for {
-		n, from, err := r.uconn.ReadFrom(buf)
+		n, _, err := r.uconn.ReadFrom(buf)
 		if err != nil {
 			r.errc <- fmt.Errorf("handleUDP read: %w", err)
 			return
 		}
 
-		d, err := socks5.NewDatagramFromBytes(buf[:n])
+		dst, buf, err := unwrapReverse(buf[:n])
 		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP datagram: %w", err)
-			return
-		}
-		ua, err := net.ResolveUDPAddr("udp4", d.Address())
-		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP resolve: %w", err)
+			r.errc <- fmt.Errorf("handleUDP unwrap: %w", err)
 			return
 		}
 
-		if dst == nil {
-			dst, err = net.DialUDP("udp4", nil, ua)
-			if err != nil {
-				r.errc <- fmt.Errorf("handleUDP dial: %w", err)
-				return
-			}
-
-			fmt.Printf("Handle %s/%s -> %s/%s\n",
-				from.Network(), from.String(), ua.Network(), ua.String(),
-			)
-
-			r.wg.Add(1)
-			go r.localToRelay(dst, from)
-		}
-
-		_, err = dst.WriteToUDP(d.Data, ua)
+		_, err = r.lconn.WriteToUDP(buf, dst)
 		if err != nil {
 			r.errc <- fmt.Errorf("handleUDP write: %w", err)
 			return
 		}
-
 	}
 }
 
-func (r *ReverseClient) localToRelay(conn *net.UDPConn, remote net.Addr) {
+func (r *ReverseClient) localToRelay() {
 	defer r.wg.Done()
 
-	dstAddr, err := net.ResolveUDPAddr("udp4", remote.String())
+	ua, err := net.ResolveUDPAddr("udp4", r.Proxy.reverseAddress)
 	if err != nil {
 		r.errc <- fmt.Errorf("localToRelay resolve: %w", err)
 		return
 	}
-	a, addr, port, err := socks5.ParseAddress(dstAddr.String())
-	if err != nil {
-		r.errc <- fmt.Errorf("localToRelay parse: %w", err)
-		return
-	}
 
-	buf := make([]byte, 65536)
+	buf := make([]byte, 65542)
 	for {
-		n, _, err := conn.ReadFromUDP(buf)
+		n, _, err := r.lconn.ReadFromUDP(buf[6:])
 		if err != nil {
 			r.errc <- fmt.Errorf("localToRelay read: %w", err)
 			return
 		}
-
-		d := socks5.NewDatagram(a, addr, port, buf[:n])
-
-		_, err = r.uconn.WriteTo(d.Bytes(), remote)
+		_, err = r.uconn.WriteTo(buf[:n+6], ua)
 		if err != nil {
 			r.errc <- fmt.Errorf("localToRelay write: %w", err)
 			return

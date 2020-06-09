@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -37,6 +38,7 @@ func main() {
 	flag.BoolVar(&p.udp, "udp", false, "reverse udp connection")
 
 	// reverse-server
+	flag.IntVar(&p.localPort, "localPort", 1080, "first port to create socks proxies on, increases sequentially")
 
 	flag.Parse()
 
@@ -78,8 +80,7 @@ type Proxy struct {
 	msg string
 
 	// reverse-server
-	localPort    int
-	localAddress string
+	localPort int
 }
 
 func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
@@ -147,4 +148,27 @@ func errorPrinter(prefix string, errc chan error) {
 	for err := range errc {
 		log.Printf("%s: %v", prefix, err)
 	}
+}
+
+var (
+	ErrNoHeader = errors.New("no header found")
+)
+
+func wrapReverse(b []byte, a *net.UDPAddr) []byte {
+	ip4 := a.IP.To4()
+	return append([]byte{
+		ip4[0], ip4[1], ip4[2], ip4[3],
+		uint8(a.Port >> 8), uint8(a.Port % 256),
+	}, b...)
+}
+
+func unwrapReverse(b []byte) (*net.UDPAddr, []byte, error) {
+	if len(b) < 6 {
+		return nil, nil, ErrNoHeader
+	}
+	return &net.UDPAddr{
+		IP:   net.IPv4(b[0], b[1], b[2], b[3]),
+		Port: int(b[4])<<8 + int(b[5]),
+		Zone: "",
+	}, b[6:], nil
 }
