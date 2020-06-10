@@ -21,8 +21,9 @@ const (
 func main() {
 	p := &Proxy{}
 	flag.StringVar(&p.turnAddress, "turnAddress", "145.100.104.117:3478", "TURN server host:port")
-	flag.StringVar(&p.turnUser, "turnUser", "turnpike", "username for TURN server")
-	flag.StringVar(&p.turnPass, "turnPass", "turnpike", "password for TURN server")
+	flag.StringVar(&p.turnUser, "turnUser", "turnpike", "username for TURN user")
+	flag.StringVar(&p.turnPass, "turnPass", "turnpike", "password for TURN user")
+	flag.StringVar(&p.turnRealm, "turnRealm", "example.com", "realm for TURN user")
 
 	flag.StringVar(&p.mode, "mode", "forward", "forward / reverse-client / reverse-server connection")
 
@@ -65,6 +66,7 @@ type Proxy struct {
 	turnAddress string
 	turnUser    string
 	turnPass    string
+	turnRealm   string
 
 	mode string
 
@@ -94,6 +96,7 @@ func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
 		Conn:           turnIn,
 		Username:       p.turnUser,
 		Password:       p.turnPass,
+		Realm:          p.realm,
 	}
 
 	client, err := turn.NewClient(turnConfig)
