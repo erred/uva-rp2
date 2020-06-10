@@ -23,7 +23,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		conn, err := c.Dial("udp4", pong)
+		conn, err := c.Dial("udp", pong)
 		if err != nil {
 			log.Fatal(err)
 		}
