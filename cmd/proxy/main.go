@@ -96,7 +96,7 @@ func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
 		Conn:           turnIn,
 		Username:       p.turnUser,
 		Password:       p.turnPass,
-		Realm:          p.realm,
+		Realm:          p.turnRealm,
 	}
 
 	client, err := turn.NewClient(turnConfig)
