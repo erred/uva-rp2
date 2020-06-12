@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/pion/turn/v2"
 	"github.com/txthinking/socks5"
 )
 
@@ -16,6 +17,10 @@ type ForwardProxy struct {
 	errc chan error
 
 	server *socks5.Server
+
+	// tcp
+	tonce   sync.Once
+	tclient *turn.Client
 
 	// udp
 	uonce  sync.Once
@@ -66,13 +71,35 @@ func (f *ForwardProxy) serveSOCKS() {
 func (f *ForwardProxy) TCPHandle(s *socks5.Server, c *net.TCPConn, r *socks5.Request) error {
 	switch r.Cmd {
 	case socks5.CmdConnect:
+		f.tonce.Do(f.initTCP)
+
 		rc, err := f.dialTCP(r.Address())
 		if err != nil {
 			return err
 		}
 
-		go io.Copy(rc, c)
-		io.Copy(c, rc)
+		a, addr, port, err := socks5.ParseAddress(rc.LocalAddr().String())
+		if err != nil {
+			return err
+		}
+
+		reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
+		_, err = reply.WriteTo(c)
+		if err != nil {
+			return err
+		}
+
+		go func() {
+			_, err = io.Copy(rc, c)
+			if err != nil {
+				f.errc <- fmt.Errorf("TCPHandle c -> rc: %w", err)
+			}
+		}()
+
+		_, err = io.Copy(c, rc)
+		if err != nil {
+			f.errc <- fmt.Errorf("TCPHandle rc -> c: %w", err)
+		}
 
 		return nil
 	case socks5.CmdUDP:
@@ -90,7 +117,27 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, c *net.TCPConn, r *socks5.Req
 }
 
 func (f *ForwardProxy) dialTCP(addr string) (net.Conn, error) {
-	panic("unimplemented")
+	ta, err := net.ResolveTCPAddr("tcp4", addr)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP resolve: %w", err)
+	}
+
+	cid, err := f.tclient.Connect(ta)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP connect: %w", err)
+	}
+
+	dconn, err := net.Dial("tcp", f.Proxy.turnAddress)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP dial: %w", err)
+	}
+
+	err = f.tclient.ConnectionBind(dconn, cid)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP bind: %w", err)
+	}
+
+	return dconn, nil
 }
 
 func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datagram) error {
@@ -129,11 +176,21 @@ func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.
 	return nil
 }
 
+func (f *ForwardProxy) initTCP() {
+	var err error
+	f.tclient, _, err = f.Proxy.connectTCP()
+	if err != nil {
+		f.errc <- fmt.Errorf("initTCP: %w", err)
+		return
+	}
+}
+
 func (f *ForwardProxy) initUDP() {
 	var err error
 	f.uconn, _, err = f.Proxy.connectUDP()
 	if err != nil {
 		f.errc <- fmt.Errorf("initUDP: %w", err)
+		return
 	}
 
 	f.wg.Add(1)

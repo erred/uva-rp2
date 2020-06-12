@@ -88,7 +88,7 @@ type Proxy struct {
 func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
 	turnIn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect udp listen: %w", err)
+		return nil, nil, fmt.Errorf("connectUDP listen: %w", err)
 	}
 	turnConfig := &turn.ClientConfig{
 		STUNServerAddr: p.turnAddress,
@@ -101,19 +101,19 @@ func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
 
 	client, err := turn.NewClient(turnConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect udp turn client: %w", err)
+		return nil, nil, fmt.Errorf("connectUDP turn client: %w", err)
 	}
 	err = client.Listen()
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect udp client listen: %w", err)
+		return nil, nil, fmt.Errorf("connectUDP client listen: %w", err)
 	}
 	relayConn, err := client.Allocate()
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect udp client allocate: %w", err)
+		return nil, nil, fmt.Errorf("connectUDP client allocate: %w", err)
 	}
 	mapped, err := client.SendBindingRequest()
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect udp client binding: %w", err)
+		return nil, nil, fmt.Errorf("connectUDP client binding: %w", err)
 	}
 
 	fmt.Printf("TURN mapped %s/%s -> %s/%s\n",
@@ -121,6 +121,42 @@ func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
 		relayConn.LocalAddr().Network(), relayConn.LocalAddr().String(),
 	)
 	return relayConn, mapped, nil
+}
+
+func (p *Proxy) connectTCP() (*turn.Client, net.Addr, error) {
+	controlConn, err := net.Dial("tcp4", p.turnAddress)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectTCP dial: %w", err)
+	}
+
+	turnConfig := &turn.ClientConfig{
+		STUNServerAddr:    p.turnAddress,
+		TURNServerAddr:    p.turnAddress,
+		Conn:              turn.NewSTUNConn(controlConn),
+		Username:          p.turnUser,
+		Password:          p.turnPass,
+		Realm:             p.turnRealm,
+		TransportProtocol: turn.ProtoTCP,
+	}
+
+	client, err := turn.NewClient(turnConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectTCP turn client: %w", err)
+	}
+	err = client.Listen()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectUDP client listen: %w", err)
+	}
+	relayConn, err := client.Allocate()
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectUDP client allocate: %w", err)
+	}
+
+	fmt.Printf("TURN mapped -> %s/%s\n",
+		"tcp", relayConn.LocalAddr().String(),
+	)
+
+	return client, relayConn.LocalAddr(), nil
 }
 
 func socksServer(addr string) (*socks5.Server, error) {

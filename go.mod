@@ -13,4 +13,7 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
 
-// replace github.com/txthinking/socks5 => ../socks5
+// use branch with tcp
+replace github.com/pion/turn/v2 => github.com/pion/turn/v2 v2.0.4-0.20200612113204-ba7906ed210e
+
+// replace github.com/pion/turn/v2 => ../turn
