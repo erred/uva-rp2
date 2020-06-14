@@ -1,9 +1,10 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 
@@ -45,11 +46,11 @@ func main() {
 
 	switch p.mode {
 	case "forward":
-		NewForwardProxy(p).Run()
+		NewForwardProxy(p).Run(context.Background())
 	case "reverse-client":
-		NewReverseClient(p).Run()
+		NewReverseClient(p).Run(context.Background())
 	case "reverse-server":
-		NewReverseServer(p).Run()
+		NewReverseServer(p).Run(context.Background())
 	default:
 		log.Fatalf("unknown mode %q", p.mode)
 	}
@@ -85,7 +86,7 @@ type Proxy struct {
 	localPort int
 }
 
-func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
+func (p *Proxy) connectUDP() (*turn.Client, net.PacketConn, error) {
 	turnIn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {
 		return nil, nil, fmt.Errorf("connectUDP listen: %w", err)
@@ -120,10 +121,10 @@ func (p *Proxy) connectUDP() (net.PacketConn, net.Addr, error) {
 		mapped.Network(), mapped.String(),
 		relayConn.LocalAddr().Network(), relayConn.LocalAddr().String(),
 	)
-	return relayConn, mapped, nil
+	return client, relayConn, nil
 }
 
-func (p *Proxy) connectTCP() (*turn.Client, net.Addr, error) {
+func (p *Proxy) connectTCP(dst string) (*turn.Client, net.Conn, error) {
 	controlConn, err := net.Dial("tcp4", p.turnAddress)
 	if err != nil {
 		return nil, nil, fmt.Errorf("connectTCP dial: %w", err)
@@ -145,18 +146,38 @@ func (p *Proxy) connectTCP() (*turn.Client, net.Addr, error) {
 	}
 	err = client.Listen()
 	if err != nil {
-		return nil, nil, fmt.Errorf("connectUDP client listen: %w", err)
+		return nil, nil, fmt.Errorf("connectTCP client listen: %w", err)
 	}
 	relayConn, err := client.Allocate()
 	if err != nil {
-		return nil, nil, fmt.Errorf("connectUDP client allocate: %w", err)
+		return nil, nil, fmt.Errorf("connectTCP client allocate: %w", err)
 	}
 
-	fmt.Printf("TURN mapped -> %s/%s\n",
+	ta, err := net.ResolveTCPAddr("tcp4", dst)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectTCP resolve: %w", err)
+	}
+	cid, err := client.Connect(ta)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectTCP connect: %w", err)
+	}
+
+	dataConn, err := net.Dial("tcp", p.turnAddress)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectTCP dial: %w", err)
+	}
+
+	err = client.ConnectionBind(dataConn, cid)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connectTCP bind: %w", err)
+	}
+
+	fmt.Printf("TURN mapped %s/%s -> %s/%s\n",
+		dataConn.LocalAddr().Network(), dataConn.LocalAddr().String(),
 		"tcp", relayConn.LocalAddr().String(),
 	)
 
-	return client, relayConn.LocalAddr(), nil
+	return client, dataConn, nil
 }
 
 func socksServer(addr string) (*socks5.Server, error) {
@@ -183,31 +204,45 @@ func udpConn(addr string) (*net.UDPConn, error) {
 	return uc, nil
 }
 
-func errorPrinter(prefix string, errc chan error) {
-	for err := range errc {
-		log.Printf("%s: %v", prefix, err)
+func dialTCP(client *turn.Client, relayAddr, dstAddr string) (net.Conn, error) {
+	ta, err := net.ResolveTCPAddr("tcp4", dstAddr)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP resolve: %w", err)
 	}
+
+	cid, err := client.Connect(ta)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP connect: %w", err)
+	}
+
+	dataConn, err := net.Dial("tcp", relayAddr)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP dial: %w", err)
+	}
+
+	err = client.ConnectionBind(dataConn, cid)
+	if err != nil {
+		return nil, fmt.Errorf("dialTCP bind: %w", err)
+	}
+
+	return dataConn, nil
 }
 
-var (
-	ErrNoHeader = errors.New("no header found")
-)
-
-func wrapReverse(b []byte, a *net.UDPAddr) []byte {
-	ip4 := a.IP.To4()
-	return append([]byte{
-		ip4[0], ip4[1], ip4[2], ip4[3],
-		uint8(a.Port >> 8), uint8(a.Port % 256),
-	}, b...)
-}
-
-func unwrapReverse(b []byte) (*net.UDPAddr, []byte, error) {
-	if len(b) < 6 {
-		return nil, nil, ErrNoHeader
-	}
-	return &net.UDPAddr{
-		IP:   net.IPv4(b[0], b[1], b[2], b[3]),
-		Port: int(b[4])<<8 + int(b[5]),
-		Zone: "",
-	}, b[6:], nil
+func copyConn(conn1, conn2 io.ReadWriter) error {
+	errc := make(chan error)
+	go func() {
+		_, err := io.Copy(conn2, conn1)
+		select {
+		case errc <- err:
+		default:
+		}
+	}()
+	go func() {
+		_, err := io.Copy(conn1, conn2)
+		select {
+		case errc <- err:
+		default:
+		}
+	}()
+	return <-errc
 }

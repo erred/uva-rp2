@@ -94,3 +94,13 @@ output
 # mapped client-addr-after-nat -> turn-allocated-addr
 TURN mapped udp/213.124.209.222:57057 -> udp/145.100.104.117:53197
 ```
+
+## dev
+
+```
+// forward
+source -> proxy (This program) -> relay (TURN) -> destinataion
+
+// reverse
+source -> server (This program) -> relay (TURN) -> proxy (This program) -> destinataion
+```

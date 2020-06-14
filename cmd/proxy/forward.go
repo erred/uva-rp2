@@ -1,26 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"io"
+	"log"
 	"net"
 	"sync"
 
-	"github.com/pion/turn/v2"
 	"github.com/txthinking/socks5"
 )
 
 type ForwardProxy struct {
 	Proxy
 
-	wg   sync.WaitGroup
-	errc chan error
-
 	server *socks5.Server
-
-	// tcp
-	tonce   sync.Once
-	tclient *turn.Client
 
 	// udp
 	uonce  sync.Once
@@ -32,30 +25,26 @@ type ForwardProxy struct {
 func NewForwardProxy(p *Proxy) *ForwardProxy {
 	return &ForwardProxy{
 		Proxy:  *p,
-		errc:   make(chan error),
 		uconns: make(map[string]*PacketConn),
 	}
 }
 
-func (f *ForwardProxy) Run() {
-	go errorPrinter("forward", f.errc)
-
-	f.wg.Add(1)
-	go f.serveSOCKS()
-
-	f.wg.Wait()
-	close(f.errc)
-}
-
-func (f *ForwardProxy) serveSOCKS() {
-	defer f.wg.Done()
-
+// Run starts a SOCKS5 server, forwarding TCP and UDP connections through the TURN relay
+func (f *ForwardProxy) Run(ctx context.Context) {
 	var err error
 	f.server, err = socksServer(f.Proxy.socksAddress)
 	if err != nil {
-		f.errc <- fmt.Errorf("serveSOCKS: %w", err)
+		log.Printf("forward: server create: %v", err)
 		return
 	}
+
+	go func() {
+		<-ctx.Done()
+		err := f.server.Shutdown()
+		if err != nil {
+			log.Printf("forward: server shutdown:")
+		}
+	}()
 
 	fmt.Printf("SOCKS5 listening tcp/%s udp/%s\n",
 		f.server.TCPAddr.String(), f.server.UDPAddr.String(),
@@ -63,47 +52,40 @@ func (f *ForwardProxy) serveSOCKS() {
 
 	err = f.server.ListenAndServe(f)
 	if err != nil {
-		f.errc <- fmt.Errorf("serveSOCKS: %w", err)
-		return
+		log.Printf("forward: server serve: %v", err)
 	}
 }
 
-func (f *ForwardProxy) TCPHandle(s *socks5.Server, c *net.TCPConn, r *socks5.Request) error {
+// TCPHandle satisfies socks.Handler.
+// Initiates TCP connection to relay/destination and copies data between connections
+// r.Address: destination address
+func (f *ForwardProxy) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks5.Request) error {
 	switch r.Cmd {
 	case socks5.CmdConnect:
-		f.tonce.Do(f.initTCP)
-
-		rc, err := f.dialTCP(r.Address())
+		// connect to relay
+		client, relay, err := f.Proxy.connectTCP(r.Address())
 		if err != nil {
 			return err
 		}
+		defer client.Close()
+		defer relay.Close()
 
-		a, addr, port, err := socks5.ParseAddress(rc.LocalAddr().String())
+		// tell socks client this connection is ok to use
+		a, addr, port, err := socks5.ParseAddress(source.RemoteAddr().String())
 		if err != nil {
 			return err
 		}
-
 		reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
-		_, err = reply.WriteTo(c)
+		_, err = reply.WriteTo(source)
 		if err != nil {
 			return err
 		}
 
-		go func() {
-			_, err = io.Copy(rc, c)
-			if err != nil {
-				f.errc <- fmt.Errorf("TCPHandle c -> rc: %w", err)
-			}
-		}()
+		// copy data between streams
+		return copyConn(relay, source)
 
-		_, err = io.Copy(c, rc)
-		if err != nil {
-			f.errc <- fmt.Errorf("TCPHandle rc -> c: %w", err)
-		}
-
-		return nil
 	case socks5.CmdUDP:
-		caddr, err := r.UDP(c, s.ServerAddr)
+		caddr, err := r.UDP(source, s.ServerAddr)
 		if err != nil {
 			return err
 		}
@@ -111,64 +93,65 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, c *net.TCPConn, r *socks5.Req
 			return err
 		}
 		return nil
+		// // connect to relay
+		// // client, relay, err := f.Proxy.connectUDP()
+		// // if err != nil {
+		// // 	return err
+		// // }
+		// // defer client.Close()
+		// // defer relay.Close()
+		//
+		// // tell socks client this connection is ok to use
+		// a, addr, port, err := socks5.ParseAddress(s.ServerAddr.String())
+		// if err != nil {
+		// 	return err
+		// }
+		// reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
+		// _, err = reply.WriteTo(source)
+		// if err != nil {
+		// 	return err
+		// }
+		//
+		// // should block until connection is closed
+		// // we don't actually know which udp connection the client will use
+		// // because they send 0.0.0.0:0
+		// b := make([]byte, 512)
+		// io.ReadFull(source, b)
+		// return err
 	default:
 		return socks5.ErrUnsupportCmd
 	}
 }
 
-func (f *ForwardProxy) dialTCP(addr string) (net.Conn, error) {
-	ta, err := net.ResolveTCPAddr("tcp4", addr)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP resolve: %w", err)
-	}
-
-	cid, err := f.tclient.Connect(ta)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP connect: %w", err)
-	}
-
-	dconn, err := net.Dial("tcp", f.Proxy.turnAddress)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP dial: %w", err)
-	}
-
-	err = f.tclient.ConnectionBind(dconn, cid)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP bind: %w", err)
-	}
-
-	return dconn, nil
-}
-
-func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datagram) error {
+// UDPHandle satisfies socks.Handler
+func (f *ForwardProxy) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks5.Datagram) error {
 	f.uonce.Do(f.initUDP)
 
-	ua, err := net.ResolveUDPAddr("udp4", d.Address())
+	dstAddr, err := net.ResolveUDPAddr("udp4", d.Address())
 	if err != nil {
 		return fmt.Errorf("UDPHandle resolve: %w", err)
 	}
 
 	f.ul.Lock()
-	c := f.uconns[ua.String()]
+	c := f.uconns[dstAddr.String()]
 	f.ul.Unlock()
 
 	if c == nil {
 		c = &PacketConn{
-			addr,
-			ua,
-			f.uconn,
+			source,
+			dstAddr,
 		}
 
 		f.ul.Lock()
-		f.uconns[ua.String()] = c
+		f.uconns[dstAddr.String()] = c
 		f.ul.Unlock()
 
 		fmt.Printf("Handling %s/%s -> %s/%s\n",
-			addr.Network(), addr.String(), ua.Network(), ua.String(),
+			source.Network(), source.String(), dstAddr.Network(), dstAddr.String(),
 		)
 	}
 
-	_, err = c.relay.WriteTo(d.Bytes(), c.remote)
+	_, err = f.uconn.WriteTo(d.Bytes(), c.destination)
 	if err != nil {
 		return fmt.Errorf("UDPHandle write: %w", err)
 	}
@@ -176,35 +159,23 @@ func (f *ForwardProxy) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.
 	return nil
 }
 
-func (f *ForwardProxy) initTCP() {
-	var err error
-	f.tclient, _, err = f.Proxy.connectTCP()
-	if err != nil {
-		f.errc <- fmt.Errorf("initTCP: %w", err)
-		return
-	}
-}
-
 func (f *ForwardProxy) initUDP() {
 	var err error
-	f.uconn, _, err = f.Proxy.connectUDP()
+	_, f.uconn, err = f.Proxy.connectUDP()
 	if err != nil {
-		f.errc <- fmt.Errorf("initUDP: %w", err)
+		log.Printf("forward: initUDP: %v", err)
 		return
 	}
 
-	f.wg.Add(1)
 	go f.handleIncoming()
 }
 
 func (f *ForwardProxy) handleIncoming() {
-	defer f.wg.Done()
-
 	buf := make([]byte, 65536)
 	for {
 		n, from, err := f.uconn.ReadFrom(buf)
 		if err != nil {
-			f.errc <- fmt.Errorf("handleIncoming read: %w", err)
+			log.Printf("forward: handleIncoming read: %v", err)
 			return
 		}
 
@@ -215,23 +186,22 @@ func (f *ForwardProxy) handleIncoming() {
 			continue
 		}
 
-		a, addr, port, err := socks5.ParseAddress(c.local.String())
+		a, addr, port, err := socks5.ParseAddress(c.source.String())
 		if err != nil {
-			f.errc <- fmt.Errorf("handleIncoming parse: %w", err)
+			log.Printf("forward: handleIncoming parse: %v", err)
 			return
 		}
 
 		d := socks5.NewDatagram(a, addr, port, buf[:n])
-		_, err = f.server.UDPConn.WriteToUDP(d.Bytes(), c.local)
+		_, err = f.server.UDPConn.WriteToUDP(d.Bytes(), c.source)
 		if err != nil {
-			f.errc <- fmt.Errorf("handleIncoming write: %w", err)
+			log.Printf("forward: handleIncoming write: %v", err)
 			return
 		}
 	}
 }
 
 type PacketConn struct {
-	local  *net.UDPAddr
-	remote *net.UDPAddr
-	relay  net.PacketConn
+	source      *net.UDPAddr
+	destination *net.UDPAddr
 }

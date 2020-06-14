@@ -110,14 +110,34 @@ func main() {
 			}
 		}
 
-		// case "socks":
-		// 	s, err := socks5.NewClassicServer("145.100.104.117:1080", "145.100.104.117", "", "", 60, 0, 60, 60)
-		// 	if err != nil {
-		// 		log.Fatal("sock5 server", err)
-		// 	}
-		// 	err = s.ListenAndServe(nil)
-		// 	if err != nil {
-		// 		log.Fatal("sock5 server", err)
-		// 	}
+	case "socks":
+		s, err := socks5.NewClassicServer("127.0.0.1:1080", "127.0.0.1", "", "", 60, 0, 60, 60)
+		if err != nil {
+			log.Fatal("sock5 server", err)
+		}
+		h := H{
+			&socks5.DefaultHandle{},
+		}
+		err = s.ListenAndServe(h)
+		if err != nil {
+			log.Fatal("sock5 server", err)
+		}
 	}
+}
+
+type H struct {
+	d socks5.Handler
+}
+
+func (h H) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks5.Request) error {
+	fmt.Println("TCPHandle source.local: ", source.LocalAddr().String())
+	fmt.Println("TCPHandle source.remote: ", source.RemoteAddr().String())
+	fmt.Println("TCPHandle request.address: ", r.Address())
+	return h.d.TCPHandle(s, source, r)
+}
+
+func (h H) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks5.Datagram) error {
+	fmt.Println("UDPHandle source: ", source.String())
+	fmt.Println("UDPHandle datagram: ", d.Address())
+	return h.d.UDPHandle(s, source, d)
 }

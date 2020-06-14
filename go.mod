@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/lucas-clemente/quic-go v0.17.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pion/turn/v2 v2.0.3
 	github.com/txthinking/runnergroup v0.0.0-20200327135940-540a793bb997 // indirect

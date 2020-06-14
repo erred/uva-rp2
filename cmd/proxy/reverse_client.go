@@ -1,136 +1,174 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"crypto/tls"
+	"log"
 	"net"
-	"sync"
+
+	quic "github.com/lucas-clemente/quic-go"
 )
 
 type ReverseClient struct {
 	Proxy
 
-	wg   sync.WaitGroup
-	errc chan error
-
-	// tcp
-	tconn net.Conn
-
 	// udp
 	uconn net.PacketConn
-	lconn *net.UDPConn
 }
 
 func NewReverseClient(p *Proxy) *ReverseClient {
 	return &ReverseClient{
 		Proxy: *p,
-
-		errc: make(chan error),
 	}
 }
 
-func (r *ReverseClient) Run() {
-	go errorPrinter("reverse-server", r.errc)
-
-	if r.Proxy.tcp {
-		r.wg.Add(1)
-		go r.connectTCP()
-	}
-	if r.Proxy.udp {
-		r.wg.Add(1)
-		go r.connectUDP()
-	}
-
-	r.wg.Wait()
-	close(r.errc)
-}
-
-func (r *ReverseClient) connectTCP() {
-	defer r.wg.Done()
-
-	panic("unimplemented")
+func (r *ReverseClient) Run(ctx context.Context) {
+	r.connectUDP()
 }
 
 func (r *ReverseClient) connectUDP() {
-	defer r.wg.Done()
-
 	var err error
-	r.uconn, _, err = r.Proxy.connectUDP()
+	_, r.uconn, err = r.Proxy.connectUDP()
 	if err != nil {
-		r.errc <- fmt.Errorf("connectUDP connect: %w", err)
+		log.Printf("reverse-client: connectUDP connect: %v", err)
 		return
 	}
-
-	r.lconn, err = udpConn("0.0.0.0:0")
-	if err != nil {
-
-	}
-
-	r.wg.Add(1)
-	go r.handleUDP()
-	r.wg.Add(1)
-	go r.localToRelay()
 
 	ua, err := net.ResolveUDPAddr("udp4", r.Proxy.reverseAddress)
 	if err != nil {
-		r.errc <- fmt.Errorf("connectUDP resolve: %w", err)
+		log.Printf("reverse-client: connectUDP resolve: %v", err)
+		return
+	}
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"quic-reverse"},
+	}
+	qSession, err := quic.Dial(r.uconn, ua, ua.String(), tlsConf, nil)
+	if err != nil {
+		log.Printf("reverse-client: connectUDP dial: %v", err)
 		return
 	}
 
-	zero := make([]byte, len(r.Proxy.msg)+6)
-	copy(zero[6:], r.Proxy.msg)
+	go func() {
+		infoStream, err := qSession.OpenStream()
+		if err != nil {
+			log.Printf("reverse-client: infoStream open: %v", err)
+			return
+		}
+		defer infoStream.Close()
 
-	_, err = r.uconn.WriteTo(zero, ua)
-	if err != nil {
-		r.errc <- fmt.Errorf("connectUDP hello: %w", err)
-		return
+		_, err = infoStream.Write([]byte(r.msg))
+		if err != nil {
+			log.Printf("reverse-client: infoStream write: %v", err)
+			return
+		}
+	}()
+
+	for {
+		stream, err := qSession.AcceptStream(context.Background())
+		if err != nil {
+			log.Printf("reverse-client: connectUDP accept: %v", err)
+			return
+		}
+		p, err := readMessage(stream)
+		if err != nil {
+			log.Printf("reverse-client: connectUDP read proto: %v", err)
+			stream.Close()
+			continue
+		}
+		a, err := readMessage(stream)
+		if err != nil {
+			log.Printf("reverse-client: connectUDP read dst addr: %v", err)
+			stream.Close()
+			continue
+		}
+		switch string(p) {
+		case "tcp":
+			go serveTCP(string(a), stream)
+		case "udp":
+			go serveUDP(string(a), stream)
+		}
 	}
 }
 
-func (r *ReverseClient) handleUDP() {
-	defer r.wg.Done()
+func serveTCP(a string, s quic.Stream) {
+	defer s.Close()
 
-	buf := make([]byte, 65536)
-	for {
-		n, _, err := r.uconn.ReadFrom(buf)
-		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP read: %w", err)
-			return
-		}
+	c, err := net.Dial("tcp4", a)
+	if err != nil {
+		log.Printf("reverse-client: serveTCP dial: %v", err)
+		return
+	}
+	defer c.Close()
 
-		dst, buf, err := unwrapReverse(buf[:n])
-		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP unwrap: %w", err)
-			return
-		}
-
-		_, err = r.lconn.WriteToUDP(buf, dst)
-		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP write: %w", err)
-			return
-		}
+	err = copyConn(c, s)
+	if err != nil {
+		log.Printf("reverse-client: serveTCP copy: %v", err)
 	}
 }
 
-func (r *ReverseClient) localToRelay() {
-	defer r.wg.Done()
+func serveUDP(a string, s quic.Stream) {
+	defer s.Close()
 
-	ua, err := net.ResolveUDPAddr("udp4", r.Proxy.reverseAddress)
+	dstAddr, err := net.ResolveUDPAddr("udp4", a)
 	if err != nil {
-		r.errc <- fmt.Errorf("localToRelay resolve: %w", err)
+		log.Printf("reverse-client: serveUDP resolve: %v", err)
 		return
 	}
 
-	buf := make([]byte, 65542)
-	for {
-		n, _, err := r.lconn.ReadFromUDP(buf[6:])
-		if err != nil {
-			r.errc <- fmt.Errorf("localToRelay read: %w", err)
-			return
+	l, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	if err != nil {
+		log.Printf("reverse-client: serveUDP listen: %v", err)
+		return
+	}
+	defer l.Close()
+
+	errc := make(chan error)
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			n, _, err := l.ReadFrom(buf)
+			if err != nil {
+				select {
+				case errc <- err:
+				default:
+				}
+				return
+			}
+			err = writeMessage(s, buf[:n])
+			if err != nil {
+				select {
+				case errc <- err:
+				default:
+				}
+				return
+			}
 		}
-		_, err = r.uconn.WriteTo(buf[:n+6], ua)
-		if err != nil {
-			r.errc <- fmt.Errorf("localToRelay write: %w", err)
-			return
+	}()
+	go func() {
+		for {
+			b, err := readMessage(s)
+			if err != nil {
+				select {
+				case errc <- err:
+				default:
+				}
+				return
+			}
+			_, err = l.WriteTo(b, dstAddr)
+			if err != nil {
+				// handle error
+				select {
+				case errc <- err:
+				default:
+				}
+				return
+			}
 		}
+	}()
+
+	err = <-errc
+	if err != nil {
+		log.Printf("reverse-client: serveUDP copy: %v", err)
 	}
 }

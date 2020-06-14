@@ -1,163 +1,165 @@
 package main
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/binary"
+	"encoding/pem"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"math/big"
 	"net"
 	"strconv"
 	"sync"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/txthinking/socks5"
 )
 
 type ReverseServer struct {
 	Proxy
-
-	wg   sync.WaitGroup
-	errc chan error
-
-	server *socks5.Server
-
-	// from->msg
-	msgs map[string]string
-
-	// msg->rconn
-	ul      sync.Mutex
-	clients map[string]*reverseConn
-
-	// udp
-	uconn *net.UDPConn
 }
 
 func NewReverseServer(p *Proxy) *ReverseServer {
 	return &ReverseServer{
-		Proxy:   *p,
-		errc:    make(chan error),
-		msgs:    make(map[string]string),
-		clients: make(map[string]*reverseConn),
-		// uconns: make(map[string]*UDPConn),
+		Proxy: *p,
 	}
 }
 
-func (r *ReverseServer) Run() {
-	go errorPrinter("reverse-server", r.errc)
-
-	// r.wg.Add(1)
-	// go r.handleTCP()
-	r.wg.Add(1)
-	go r.handleUDP()
-
-	r.wg.Wait()
-	close(r.errc)
-}
-
-func (r *ReverseServer) handleTCP() {
-	defer r.wg.Done()
-
-	panic("unimplemeted")
-
+func (r *ReverseServer) Run(ctx context.Context) {
+	r.handleUDP()
 }
 
 func (r *ReverseServer) handleUDP() {
-	defer r.wg.Done()
-
-	var err error
-	r.uconn, err = udpConn(r.Proxy.reverseAddress)
+	tlsConf, err := generateTLSConfig()
 	if err != nil {
-		r.errc <- fmt.Errorf("serve: %w", err)
+		log.Printf("revserse-server: handleUDP gentls: %v", err)
 		return
 	}
 
-	fmt.Printf("Waiting on %s/%s\n",
-		r.uconn.LocalAddr().Network(), r.uconn.LocalAddr().String(),
+	qListener, err := quic.ListenAddr(r.Proxy.reverseAddress, tlsConf, nil)
+	if err != nil {
+		log.Printf("revserse-server: handleUDP listen: %v", err)
+		return
+	}
+	defer qListener.Close()
+
+	fmt.Printf("Listening on %s/%s\n",
+		qListener.Addr().Network(), qListener.Addr().String(),
 	)
 
-	buf := make([]byte, 65536)
 	for {
-		n, from, err := r.uconn.ReadFromUDP(buf)
+		qSession, err := qListener.Accept(context.Background())
 		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP read: %w", err)
+			log.Printf("revserse-server: handleUDP accept: %v", err)
 			return
 		}
 
-		r.ul.Lock()
-		msg, ok := r.msgs[from.String()]
-		if !ok {
-			msg = string(buf[6:n])
-			r.msgs[from.String()] = msg
-			// doesn't exist
-			rc := &reverseConn{
-				errc:   r.errc,
-				wg:     &r.wg,
-				msg:    msg,
-				port:   r.Proxy.localPort,
-				uconn:  r.uconn,
-				remote: from,
-			}
-			r.clients[msg] = rc
+		fmt.Printf("Accepted session %s/%s -> %s/%s\n",
+			qSession.RemoteAddr().Network(), qSession.RemoteAddr().String(),
+			qSession.LocalAddr().Network(), qSession.LocalAddr().String(),
+		)
 
-			r.wg.Add(1)
-			go rc.serveUDP()
+		go r.serveQUIC(qSession)
+	}
+}
 
-			r.ul.Unlock()
-			continue
-		}
+func (r *ReverseServer) serveQUIC(s quic.Session) {
+	defer s.CloseWithError(0, "")
 
-		rc, ok := r.clients[msg]
-		if !ok {
-			panic("not found! " + msg)
-		}
-		r.ul.Unlock()
-
-		if rc.local == nil {
-			// no local conn
-			continue
-		}
-
-		// exists
-
-		a, addr, port, err := socks5.ParseAddress(rc.remote.String())
+	go func() {
+		infoStream, err := s.AcceptStream(context.Background())
 		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP parse: %w", err)
+			log.Printf("revserse-server: serveQUIC accept: %v", err)
 			return
 		}
-
-		d := socks5.NewDatagram(a, addr, port, buf[6:n])
-
-		_, err = rc.server.UDPConn.WriteToUDP(d.Bytes(), rc.local)
+		defer infoStream.Close()
+		b, err := ioutil.ReadAll(infoStream)
 		if err != nil {
-			r.errc <- fmt.Errorf("handleUDP write: %w", err)
+			log.Printf("revserse-server: serveQUIC readall: %v", err)
+			return
 		}
+		fmt.Printf("Session %s/%s message: %q\n",
+			s.RemoteAddr().Network(), s.RemoteAddr().String(),
+			string(b),
+		)
+	}()
+
+	listenAddr := net.JoinHostPort("0.0.0.0", strconv.Itoa(r.localPort))
+	r.localPort++
+
+	sServer, err := socksServer(listenAddr)
+	if err != nil {
+		log.Printf("revserse-server: serveQUIC socks: %v", err)
+		return
+	}
+
+	fmt.Printf("Listening on tcp/%s udp/%s for session %s/%s\n",
+		sServer.TCPAddr.String(), sServer.UDPAddr.String(),
+		s.RemoteAddr().Network(), s.RemoteAddr().String(),
+	)
+
+	err = sServer.ListenAndServe(&reverseConn{
+		sess: s,
+		udp:  make(map[string]quic.Stream),
+		ss:   sServer,
+	})
+	if err != nil {
+		log.Printf("revserse-server: serveQUIC serve: %v", err)
+		return
 	}
 }
 
 type reverseConn struct {
-	errc chan error
-	wg   *sync.WaitGroup
-	once sync.Once
+	sess quic.Session
 
-	msg    string
-	port   int
-	server *socks5.Server
-	uconn  *net.UDPConn
-	remote *net.UDPAddr
-	local  *net.UDPAddr
+	// udp
+	ul  sync.Mutex
+	udp map[string]quic.Stream
+	ss  *socks5.Server
 }
 
-func (rc *reverseConn) TCPHandle(s *socks5.Server, c *net.TCPConn, r *socks5.Request) error {
+func (rc *reverseConn) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks5.Request) error {
 	switch r.Cmd {
 	case socks5.CmdConnect:
-		panic("unimplemeted")
-		// rc, err := rc.dialTCP(r.Address())
-		// if err != nil {
-		// 	return err
-		// }
-		//
-		// go io.Copy(rc, c)
-		// io.Copy(c, rc)
+		// open stream to reverse client
+		stream, err := rc.sess.OpenStream()
+		if err != nil {
+			return err
+		}
+		defer stream.Close()
 
-		return nil
+		// tell reverse client where this connection should go
+		err = writeMessage(stream, []byte("tcp"))
+		if err != nil {
+			return err
+		}
+		err = writeMessage(stream, []byte(r.Address()))
+		if err != nil {
+			return err
+		}
+
+		// tell socks client this connection is ok to use
+		a, addr, port, err := socks5.ParseAddress(source.RemoteAddr().String())
+		if err != nil {
+			return err
+		}
+		reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
+		_, err = reply.WriteTo(source)
+		if err != nil {
+			return err
+		}
+
+		// copy data between streams
+		return copyConn(stream, source)
+
 	case socks5.CmdUDP:
-		caddr, err := r.UDP(c, s.ServerAddr)
+		caddr, err := r.UDP(source, s.ServerAddr)
 		if err != nil {
 			return err
 		}
@@ -170,47 +172,136 @@ func (rc *reverseConn) TCPHandle(s *socks5.Server, c *net.TCPConn, r *socks5.Req
 	}
 }
 
-func (rc *reverseConn) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datagram) error {
-	if rc.local == nil {
-		rc.local = addr
-	}
-
-	ua, err := net.ResolveUDPAddr("udp4", d.Address())
-	if err != nil {
-		return fmt.Errorf("UDPHandle resolve: %w", err)
-	}
-
-	b := wrapReverse(d.Data, ua)
-
-	_, err = rc.uconn.WriteToUDP(b, rc.remote)
-	if err != nil {
-		return fmt.Errorf("UDPHandle write: %w", err)
-	}
-
-	return nil
-}
-
-func (rc *reverseConn) init() {
+func (rc *reverseConn) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks5.Datagram) error {
 	var err error
-	rc.server, err = socksServer(net.JoinHostPort("0.0.0.0", strconv.Itoa(rc.port)))
+	rc.ul.Lock()
+	stream, ok := rc.udp[d.Address()]
+	rc.ul.Unlock()
+
+	if !ok {
+		stream, err = rc.sess.OpenStream()
+		if err != nil {
+			return err
+		}
+		err = writeMessage(stream, []byte("udp"))
+		if err != nil {
+			return err
+		}
+		err = writeMessage(stream, []byte(d.Address()))
+		if err != nil {
+			return err
+		}
+		rc.ul.Lock()
+		rc.udp[d.Address()] = stream
+		rc.ul.Unlock()
+
+		go rc.handleIncoming(source, stream)
+	}
+
+	return writeMessage(stream, d.Data)
+}
+
+func (rc *reverseConn) handleIncoming(local *net.UDPAddr, s quic.Stream) {
+	defer s.Close()
+
+	a, addr, port, err := socks5.ParseAddress(local.String())
 	if err != nil {
-		rc.errc <- fmt.Errorf("serveSOCKS: %w", err)
+		log.Printf("revserse-server: handleIncoming parse: %v", err)
 		return
+	}
+	for {
+		b, err := readMessage(s)
+		if err != nil {
+			log.Printf("revserse-server: handleIncoming read: %v", err)
+			return
+		}
+		d := socks5.NewDatagram(a, addr, port, b)
+		_, err = rc.ss.UDPConn.WriteToUDP(d.Bytes(), local)
+		if err != nil {
+			log.Printf("revserse-server: handleIncoming write: %v", err)
+			return
+		}
 	}
 }
 
-func (rc *reverseConn) serveUDP() {
-	defer rc.wg.Done()
-
-	rc.once.Do(rc.init)
-
-	fmt.Printf("SOCKS5 listening %s/%s for %s\n",
-		rc.server.UDPAddr.Network(), rc.server.UDPAddr.String(), rc.msg,
-	)
-
-	err := rc.server.ListenAndServe(rc)
+func generateTLSConfig() (*tls.Config, error) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		rc.errc <- fmt.Errorf("serveUDP: %w", err)
-		return
+		return nil, err
 	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+	}
+
+	// public key
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+
+	// private key
+	priv, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: priv})
+
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		NextProtos:   []string{"quic-reverse"},
+	}, nil
+}
+
+// func generateTLSConfig() (*tls.Config, error) {
+// 	return generateTLSConfig2(), nil
+// }
+// func generateTLSConfig2() *tls.Config {
+// 	key, err := rsa.GenerateKey(rand.Reader, 1024)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	template := x509.Certificate{SerialNumber: big.NewInt(1)}
+// 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+// 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+//
+// 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return &tls.Config{
+// 		Certificates: []tls.Certificate{tlsCert},
+// 		NextProtos:   []string{"quic-echo-example"},
+// 	}
+// }
+
+func readMessage(r io.Reader) ([]byte, error) {
+	buf := make([]byte, 4)
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return nil, err
+	}
+	buf = make([]byte, binary.BigEndian.Uint32(buf))
+	_, err = io.ReadFull(r, buf)
+	return buf, err
+}
+
+func writeMessage(w io.Writer, b []byte) error {
+	l := uint32(len(b))
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, l)
+	_, err := w.Write(buf)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(b)
+	return err
 }
