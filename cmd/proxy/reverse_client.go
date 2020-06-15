@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net"
 
@@ -97,6 +98,11 @@ func serveTCP(a string, s quic.Stream) {
 	}
 	defer c.Close()
 
+	fmt.Printf("Handling %v -> %s/%s\n",
+		s.StreamID(),
+		c.RemoteAddr().Network(), c.RemoteAddr().String(),
+	)
+
 	err = copyConn(c, s)
 	if err != nil {
 		log.Printf("reverse-client: serveTCP copy: %v", err)
@@ -118,6 +124,11 @@ func serveUDP(a string, s quic.Stream) {
 		return
 	}
 	defer l.Close()
+
+	fmt.Printf("Handling %v -> %s/%s\n",
+		s.StreamID(),
+		dstAddr.Network(), dstAddr.String(),
+	)
 
 	errc := make(chan error)
 	go func() {

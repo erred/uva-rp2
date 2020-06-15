@@ -81,6 +81,11 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 			return err
 		}
 
+		fmt.Printf("Handling %s/%s -> %s/%s\n",
+			source.RemoteAddr().Network(), source.RemoteAddr().String(),
+			"tcp", r.Address(),
+		)
+
 		// copy data between streams
 		return copyConn(relay, source)
 

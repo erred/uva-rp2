@@ -149,6 +149,12 @@ func (rc *reverseConn) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 			return err
 		}
 
+		fmt.Printf("Handling %s/%s - %v -> %s/%s\n",
+			source.RemoteAddr().Network(), source.RemoteAddr().String(),
+			stream.StreamID(),
+			"tcp", r.Address(),
+		)
+
 		// copy data between streams
 		return copyConn(stream, source)
 
@@ -188,6 +194,12 @@ func (rc *reverseConn) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks
 		rc.ul.Lock()
 		rc.udp[source.String()+d.Address()] = stream
 		rc.ul.Unlock()
+
+		fmt.Printf("Handling %s/%s - %v -> %s/%s\n",
+			source.Network(), source.String(),
+			stream.StreamID(),
+			"udp", d.Address(),
+		)
 
 		go rc.handleIncoming(source, stream)
 	}
