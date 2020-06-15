@@ -11,9 +11,6 @@ import (
 
 type ReverseClient struct {
 	Proxy
-
-	// udp
-	uconn net.PacketConn
 }
 
 func NewReverseClient(p *Proxy) *ReverseClient {
@@ -27,8 +24,7 @@ func (r *ReverseClient) Run(ctx context.Context) {
 }
 
 func (r *ReverseClient) connectUDP() {
-	var err error
-	_, r.uconn, err = r.Proxy.connectUDP()
+	_, uconn, err := r.Proxy.connectUDP()
 	if err != nil {
 		log.Printf("reverse-client: connectUDP connect: %v", err)
 		return
@@ -43,7 +39,7 @@ func (r *ReverseClient) connectUDP() {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-reverse"},
 	}
-	qSession, err := quic.Dial(r.uconn, ua, ua.String(), tlsConf, nil)
+	qSession, err := quic.Dial(uconn, ua, ua.String(), tlsConf, nil)
 	if err != nil {
 		log.Printf("reverse-client: connectUDP dial: %v", err)
 		return

@@ -93,31 +93,6 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 			return err
 		}
 		return nil
-		// // connect to relay
-		// // client, relay, err := f.Proxy.connectUDP()
-		// // if err != nil {
-		// // 	return err
-		// // }
-		// // defer client.Close()
-		// // defer relay.Close()
-		//
-		// // tell socks client this connection is ok to use
-		// a, addr, port, err := socks5.ParseAddress(s.ServerAddr.String())
-		// if err != nil {
-		// 	return err
-		// }
-		// reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
-		// _, err = reply.WriteTo(source)
-		// if err != nil {
-		// 	return err
-		// }
-		//
-		// // should block until connection is closed
-		// // we don't actually know which udp connection the client will use
-		// // because they send 0.0.0.0:0
-		// b := make([]byte, 512)
-		// io.ReadFull(source, b)
-		// return err
 	default:
 		return socks5.ErrUnsupportCmd
 	}

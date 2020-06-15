@@ -6,10 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/binary"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -32,10 +30,6 @@ func NewReverseServer(p *Proxy) *ReverseServer {
 }
 
 func (r *ReverseServer) Run(ctx context.Context) {
-	r.handleUDP()
-}
-
-func (r *ReverseServer) handleUDP() {
 	tlsConf, err := generateTLSConfig()
 	if err != nil {
 		log.Printf("revserse-server: handleUDP gentls: %v", err)
@@ -175,7 +169,7 @@ func (rc *reverseConn) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 func (rc *reverseConn) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks5.Datagram) error {
 	var err error
 	rc.ul.Lock()
-	stream, ok := rc.udp[d.Address()]
+	stream, ok := rc.udp[source.String()+d.Address()]
 	rc.ul.Unlock()
 
 	if !ok {
@@ -192,7 +186,7 @@ func (rc *reverseConn) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks
 			return err
 		}
 		rc.ul.Lock()
-		rc.udp[d.Address()] = stream
+		rc.udp[source.String()+d.Address()] = stream
 		rc.ul.Unlock()
 
 		go rc.handleIncoming(source, stream)
@@ -255,53 +249,4 @@ func generateTLSConfig() (*tls.Config, error) {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"quic-reverse"},
 	}, nil
-}
-
-// func generateTLSConfig() (*tls.Config, error) {
-// 	return generateTLSConfig2(), nil
-// }
-// func generateTLSConfig2() *tls.Config {
-// 	key, err := rsa.GenerateKey(rand.Reader, 1024)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-// 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-// 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-//
-// 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	return &tls.Config{
-// 		Certificates: []tls.Certificate{tlsCert},
-// 		NextProtos:   []string{"quic-echo-example"},
-// 	}
-// }
-
-func readMessage(r io.Reader) ([]byte, error) {
-	buf := make([]byte, 4)
-	_, err := io.ReadFull(r, buf)
-	if err != nil {
-		return nil, err
-	}
-	buf = make([]byte, binary.BigEndian.Uint32(buf))
-	_, err = io.ReadFull(r, buf)
-	return buf, err
-}
-
-func writeMessage(w io.Writer, b []byte) error {
-	l := uint32(len(b))
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, l)
-	_, err := w.Write(buf)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(b)
-	return err
 }

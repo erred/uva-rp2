@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -10,13 +11,6 @@ import (
 
 	"github.com/pion/turn/v2"
 	"github.com/txthinking/socks5"
-)
-
-const (
-	protoTCP = 6
-	protoUDP = 17
-
-	portTURN = 3478
 )
 
 func main() {
@@ -36,8 +30,8 @@ func main() {
 	flag.StringVar(&p.msg, "msg", "hello world", "message in hello messsage")
 
 	// reverse-client
-	flag.BoolVar(&p.tcp, "tcp", false, "reverse tcp connection")
-	flag.BoolVar(&p.udp, "udp", false, "reverse udp connection")
+	// flag.BoolVar(&p.tcp, "tcp", false, "reverse tcp connection")
+	// flag.BoolVar(&p.udp, "udp", false, "reverse udp connection")
 
 	// reverse-server
 	flag.IntVar(&p.localPort, "localPort", 1080, "first port to create socks proxies on, increases sequentially")
@@ -54,10 +48,6 @@ func main() {
 	default:
 		log.Fatalf("unknown mode %q", p.mode)
 	}
-}
-
-type runner interface {
-	Run()
 }
 
 type Proxy struct {
@@ -78,8 +68,8 @@ type Proxy struct {
 	reverseAddress string
 
 	// reverse-client
-	tcp bool
-	udp bool
+	// tcp bool
+	// udp bool
 	msg string
 
 	// reverse-server
@@ -192,42 +182,6 @@ func socksServer(addr string) (*socks5.Server, error) {
 	return s, nil
 }
 
-func udpConn(addr string) (*net.UDPConn, error) {
-	ua, err := net.ResolveUDPAddr("udp4", addr)
-	if err != nil {
-		return nil, fmt.Errorf("udpConn addr: %w", err)
-	}
-	uc, err := net.ListenUDP("udp4", ua)
-	if err != nil {
-		return nil, fmt.Errorf("udpConn listen: %w", err)
-	}
-	return uc, nil
-}
-
-func dialTCP(client *turn.Client, relayAddr, dstAddr string) (net.Conn, error) {
-	ta, err := net.ResolveTCPAddr("tcp4", dstAddr)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP resolve: %w", err)
-	}
-
-	cid, err := client.Connect(ta)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP connect: %w", err)
-	}
-
-	dataConn, err := net.Dial("tcp", relayAddr)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP dial: %w", err)
-	}
-
-	err = client.ConnectionBind(dataConn, cid)
-	if err != nil {
-		return nil, fmt.Errorf("dialTCP bind: %w", err)
-	}
-
-	return dataConn, nil
-}
-
 func copyConn(conn1, conn2 io.ReadWriter) error {
 	errc := make(chan error)
 	go func() {
@@ -245,4 +199,27 @@ func copyConn(conn1, conn2 io.ReadWriter) error {
 		}
 	}()
 	return <-errc
+}
+
+func readMessage(r io.Reader) ([]byte, error) {
+	buf := make([]byte, 4)
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return nil, err
+	}
+	buf = make([]byte, binary.BigEndian.Uint32(buf))
+	_, err = io.ReadFull(r, buf)
+	return buf, err
+}
+
+func writeMessage(w io.Writer, b []byte) error {
+	l := uint32(len(b))
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, l)
+	_, err := w.Write(buf)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(b)
+	return err
 }
