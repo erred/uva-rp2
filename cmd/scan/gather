@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+mkdir results-b || true
+for i in {20..29}; do
+    rsync -rP scan-$i:turn-results results-b/scan-$i
+done
