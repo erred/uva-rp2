@@ -40,7 +40,10 @@ func (r *ReverseClient) connectUDP() {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-reverse"},
 	}
-	qSession, err := quic.Dial(uconn, ua, ua.String(), tlsConf, nil)
+	quicConf := &quic.Config{
+		KeepAlive: true,
+	}
+	qSession, err := quic.Dial(uconn, ua, ua.String(), tlsConf, quicConf)
 	if err != nil {
 		log.Printf("reverse-client: connectUDP dial: %v", err)
 		return

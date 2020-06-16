@@ -70,7 +70,6 @@ Starts a SOCKS proxy per incoming connection.
 
 - only uses UDP (should not actually cause issues, this part runs over public internet)
 - possible race condition on localPort?
-- QUIC timeouts on no activity?
 
 #### example
 
@@ -112,7 +111,7 @@ Establishes connection to reverse server, serves connections
 
 #### limitations
 
-- QUIC timeouts on no activity?
+- only uses UDP (could fix with running TURN in UDP over TCP mode)
 
 #### example
 
