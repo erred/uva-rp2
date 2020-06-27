@@ -80,7 +80,7 @@ func main() {
 
 						fmt.Printf("%s -> %s %s\n", c.RemoteAddr().String(), c.LocalAddr().String(), buf[:n])
 
-						_, err = c.Write([]byte(time.Now().String() + " pong"))
+						_, err = c.Write([]byte("pong " + c.RemoteAddr().String()))
 						if err != nil {
 							log.Println(err)
 							return
@@ -104,7 +104,7 @@ func main() {
 
 			fmt.Printf("%s -> %s %s\n", addr.String(), c.LocalAddr().String(), buf[:n])
 
-			_, err = c.WriteTo([]byte(time.Now().String()+" pong"), addr)
+			_, err = c.WriteTo([]byte("pong "+addr.String()), addr)
 			if err != nil {
 				log.Fatal(err)
 			}

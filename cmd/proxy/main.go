@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -21,6 +22,8 @@ func main() {
 	flag.StringVar(&p.turnRealm, "turnRealm", "example.com", "realm for TURN user")
 
 	flag.StringVar(&p.mode, "mode", "forward", "forward / reverse-client / reverse-server connection")
+	flag.BoolVar(&p.tcp, "tcp", false, "use tcp for client-relay in udp connections")
+	flag.BoolVar(&p.tls, "tls", false, "use tls for client-relay in udp connections")
 
 	// forward
 	flag.StringVar(&p.socksAddress, "socksAddress", "127.0.0.1:1080", "(forward mode) SOCKS5 host:port")
@@ -60,6 +63,8 @@ type Proxy struct {
 	turnRealm   string
 
 	mode string
+	tcp  bool
+	tls  bool
 
 	// forward
 	socksAddress string
@@ -77,10 +82,29 @@ type Proxy struct {
 }
 
 func (p *Proxy) connectUDP() (*turn.Client, net.PacketConn, error) {
-	turnIn, err := net.ListenPacket("udp4", "0.0.0.0:0")
-	if err != nil {
-		return nil, nil, fmt.Errorf("connectUDP listen: %w", err)
+	var turnIn net.PacketConn
+	var err error
+	if p.tls {
+		turnIn0, err := tls.Dial("tcp4", p.turnAddress, &tls.Config{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("connectUDP dial: %w", err)
+		}
+		turnIn = turn.NewSTUNConn(turnIn0)
+	} else if p.tcp {
+		turnIn0, err := net.Dial("tcp4", p.turnAddress)
+		if err != nil {
+			return nil, nil, fmt.Errorf("connectUDP dial: %w", err)
+		}
+		turnIn = turn.NewSTUNConn(turnIn0)
+	} else {
+		turnIn, err = net.ListenPacket("udp4", "0.0.0.0:0")
+		if err != nil {
+			return nil, nil, fmt.Errorf("connectUDP listen: %w", err)
+		}
 	}
+
 	turnConfig := &turn.ClientConfig{
 		STUNServerAddr: p.turnAddress,
 		TURNServerAddr: p.turnAddress,

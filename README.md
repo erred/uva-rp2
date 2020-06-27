@@ -17,6 +17,8 @@ A repo for uva-rp2
 - [ ] implement rfc6062?
 - [ ] identify "public" TURN servers
 
+https://medium.com/tenable-techblog/using-webrtc-ice-servers-for-port-scanning-in-chrome-ce17b19dd474
+
 ### scoping
 
 - proxy protocol: socks5
@@ -55,7 +57,9 @@ A repo for uva-rp2
 key: **important**, ~~obseleted~~
 
 - [1928](https://tools.ietf.org/html/rfc1928) SOCKS Protocol Version 5
+- [3264](https://tools.ietf.org/html/rfc3264) An Offer/Answer Model with the Session Description Protocol (SDP)
 - [3489](https://tools.ietf.org/html/rfc3489) ~~STUN - Simple Traversal of User Datagram Protocol (UDP) Through Network Address Translators (NATs)~~
+- [4566](https://tools.ietf.org/html/rfc4566) SDP: Session Description Protocol
 - [5128](https://tools.ietf.org/html/rfc5128) State of Peer-to-Peer (P2P) Communication across Network Address Translators (NATs)
 - [5245](https://tools.ietf.org/html/rfc5245) ~~Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal for Offer/Answer Protocols~~
 - [5389](https://tools.ietf.org/html/rfc5389) **Session Traversal Utilities for NAT (STUN)**
@@ -64,11 +68,16 @@ key: **important**, ~~obseleted~~
 - [5780](https://tools.ietf.org/html/rfc5780) NAT Behavior Discovery Using Session Traversal Utilities for NAT (STUN)
 - [5928](https://tools.ietf.org/html/rfc5928) Traversal Using Relays around NAT (TURN) Resolution Mechanism
 - [6062](https://tools.ietf.org/html/rfc6062) **Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations**
+- [6544](https://tools.ietf.org/html/rfc6544) TCP Candidates with Interactive Connectivity Establishment (ICE)
 - [7065](https://tools.ietf.org/html/rfc7065) Traversal Using Relays around NAT (TURN) Uniform Resource Identifiers
 - [7350](https://tools.ietf.org/html/rfc7350) Datagram Transport Layer Security (DTLS) as Transport for Session Traversal Utilities for NAT (STUN)
 - [7376](https://tools.ietf.org/html/rfc7376) Problems with Session Traversal Utilities for NAT (STUN) Long-Term Authentication for Traversal Using Relays around NAT (TURN)
 - [8155](https://tools.ietf.org/html/rfc8155) Traversal Using Relays around NAT (TURN) Server Auto Discovery
 - [8445](https://tools.ietf.org/html/rfc8445) Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal
+
+drafts
+
+- [draft-ietf-mmusic-ice-sip-sdp-39](https://tools.ietf.org/html/draft-ietf-mmusic-ice-sip-sdp-39) Session Description Protocol (SDP) Offer/Answer procedures for Interactive Connectivity Establishment (ICE)
 
 ### Libraries
 
@@ -93,6 +102,8 @@ key: **important**, ~~obseleted~~
 ### Notes
 
 - Enable Security [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
+
+- draft [TURN over WebSocket](https://tools.ietf.org/html/draft-chenxin-behave-turn-websocket-01)
 
 #### coturn
 
