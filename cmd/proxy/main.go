@@ -139,9 +139,21 @@ func (p *Proxy) connectUDP() (*turn.Client, net.PacketConn, error) {
 }
 
 func (p *Proxy) connectTCP(dst string) (*turn.Client, net.Conn, error) {
-	controlConn, err := net.Dial("tcp4", p.turnAddress)
-	if err != nil {
-		return nil, nil, fmt.Errorf("connectTCP dial: %w", err)
+	var err error
+	var controlConn net.Conn
+
+	if p.tls {
+		controlConn, err = tls.Dial("tcp4", p.turnAddress, &tls.Config{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("connectTCP dial: %w", err)
+		}
+	} else {
+		controlConn, err = net.Dial("tcp4", p.turnAddress)
+		if err != nil {
+			return nil, nil, fmt.Errorf("connectTCP dial: %w", err)
+		}
 	}
 
 	turnConfig := &turn.ClientConfig{

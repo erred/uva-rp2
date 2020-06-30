@@ -39,11 +39,13 @@ Effectively uses the TURN relay as a forward proxy.
 
 # all options
 ./proxy -mode forward \
-  -socksAddress 0.0.0.0:1080 \      # address to listen on
-  -turnAddress 5.6.7.8:port \       # address of TURN relay
+  -socksAddress 0.0.0.0:1080 \  # address to listen on
+  -turnAddress 5.6.7.8:port \   # address of TURN relay
   -turnUser username \
   -turnPass password \
-  -turnRealm realm
+  -turnRealm realm \
+  -tls \                        # run all connections (tcp, udp) over tls
+  -tcp                          # run udp connections over tcp
 ```
 
 example output:
@@ -131,7 +133,9 @@ Establishes connection to reverse server, serves connections
   -turnAddress 5.6.7.8:port \
   -turnUser username \
   -turnPass password \
-  -turnRealm realm
+  -turnRealm realm \
+  -tls \                        # run turn connection over tls
+  -tcp                          # run turn connection over tcp
 ```
 
 example output:
