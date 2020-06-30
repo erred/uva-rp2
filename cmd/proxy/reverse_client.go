@@ -21,10 +21,6 @@ func NewReverseClient(p *Proxy) *ReverseClient {
 }
 
 func (r *ReverseClient) Run(ctx context.Context) {
-	r.connectUDP()
-}
-
-func (r *ReverseClient) connectUDP() {
 	_, uconn, err := r.Proxy.connectUDP()
 	if err != nil {
 		log.Printf("reverse-client: connectUDP connect: %v", err)

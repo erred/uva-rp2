@@ -21,6 +21,8 @@ import (
 
 type ReverseServer struct {
 	Proxy
+
+	lpmu sync.Mutex
 }
 
 func NewReverseServer(p *Proxy) *ReverseServer {
@@ -32,13 +34,16 @@ func NewReverseServer(p *Proxy) *ReverseServer {
 func (r *ReverseServer) Run(ctx context.Context) {
 	tlsConf, err := generateTLSConfig()
 	if err != nil {
-		log.Printf("revserse-server: handleUDP gentls: %v", err)
+		log.Printf("reverse-server: handleUDP gentls: %v", err)
 		return
 	}
+	qConf := &quic.Config{
+		KeepAlive: true,
+	}
 
-	qListener, err := quic.ListenAddr(r.Proxy.reverseAddress, tlsConf, nil)
+	qListener, err := quic.ListenAddr(r.Proxy.reverseAddress, tlsConf, qConf)
 	if err != nil {
-		log.Printf("revserse-server: handleUDP listen: %v", err)
+		log.Printf("reverse-server: handleUDP listen: %v", err)
 		return
 	}
 	defer qListener.Close()
@@ -50,7 +55,7 @@ func (r *ReverseServer) Run(ctx context.Context) {
 	for {
 		qSession, err := qListener.Accept(context.Background())
 		if err != nil {
-			log.Printf("revserse-server: handleUDP accept: %v", err)
+			log.Printf("reverse-server: handleUDP accept: %v", err)
 			return
 		}
 
@@ -69,13 +74,13 @@ func (r *ReverseServer) serveQUIC(s quic.Session) {
 	go func() {
 		infoStream, err := s.AcceptStream(context.Background())
 		if err != nil {
-			log.Printf("revserse-server: serveQUIC accept: %v", err)
+			log.Printf("reverse-server: serveQUIC accept: %v", err)
 			return
 		}
 		defer infoStream.Close()
 		b, err := ioutil.ReadAll(infoStream)
 		if err != nil {
-			log.Printf("revserse-server: serveQUIC readall: %v", err)
+			log.Printf("reverse-server: serveQUIC readall: %v", err)
 			return
 		}
 		fmt.Printf("Session %s/%s message: %q\n",
@@ -84,14 +89,21 @@ func (r *ReverseServer) serveQUIC(s quic.Session) {
 		)
 	}()
 
+	r.lpmu.Lock()
 	listenAddr := net.JoinHostPort("0.0.0.0", strconv.Itoa(r.localPort))
 	r.localPort++
+	r.lpmu.Unlock()
 
 	sServer, err := socksServer(listenAddr)
 	if err != nil {
-		log.Printf("revserse-server: serveQUIC socks: %v", err)
+		log.Printf("reverse-server: serveQUIC socks: %v", err)
 		return
 	}
+
+	go func(ctx context.Context) {
+		<-ctx.Done()
+		sServer.Shutdown()
+	}(s.Context())
 
 	fmt.Printf("Listening on tcp/%s udp/%s for session %s/%s\n",
 		sServer.TCPAddr.String(), sServer.UDPAddr.String(),
@@ -104,9 +116,10 @@ func (r *ReverseServer) serveQUIC(s quic.Session) {
 		ss:   sServer,
 	})
 	if err != nil {
-		log.Printf("revserse-server: serveQUIC serve: %v", err)
+		log.Printf("reverse-server: serveQUIC serve: %v", err)
 		return
 	}
+
 }
 
 type reverseConn struct {
@@ -167,6 +180,7 @@ func (rc *reverseConn) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 			return err
 		}
 		return nil
+
 	default:
 		return socks5.ErrUnsupportCmd
 	}
@@ -212,19 +226,19 @@ func (rc *reverseConn) handleIncoming(local *net.UDPAddr, s quic.Stream) {
 
 	a, addr, port, err := socks5.ParseAddress(local.String())
 	if err != nil {
-		log.Printf("revserse-server: handleIncoming parse: %v", err)
+		log.Printf("reverse-server: handleIncoming parse: %v", err)
 		return
 	}
 	for {
 		b, err := readMessage(s)
 		if err != nil {
-			log.Printf("revserse-server: handleIncoming read: %v", err)
+			log.Printf("reverse-server: handleIncoming read: %v", err)
 			return
 		}
 		d := socks5.NewDatagram(a, addr, port, b)
 		_, err = rc.ss.UDPConn.WriteToUDP(d.Bytes(), local)
 		if err != nil {
-			log.Printf("revserse-server: handleIncoming write: %v", err)
+			log.Printf("reverse-server: handleIncoming write: %v", err)
 			return
 		}
 	}

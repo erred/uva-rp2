@@ -234,22 +234,85 @@ would be unavoidable if stable long term credentials are desired.
 
 ## results & discussion
 
-### forwarding
+### forward & reverse
 
-### reverse
+Given TURN relays that support the protocols,
+forwarding connections works as expected for both TCP and UDP.
+
+Reverse connections work even better,
+as it only relies on well tested library code.
 
 ### limitations
 
-- implementation issues
-- proxy protocol limitations
-- udp return path
+There are serveral issues with the implementation,
+such as the aforementioned session / allocation leakage
+and UDP return path issues,
+as well as a lack of graceful error handling.
+Additionally, refreshes for TCP allocations was not implemented,
+leading to a maximum lifetime of 10 minutes for TCP connections.
+This may not be an issue for short lived HTTP requests,
+but may be for longer lived connections such as those for SSH.
+
+Another limitation is with domain names.
+In the forwarding configuration,
+this is limited by both the choice of SOCKS library
+and the TURN protocol,
+which does not support addressing hosts through domain names.
+In the reverse configuration, this is only limited by the SOCKS library,
+and a different implementation would not have this restriction.
+As a result of the above, only raw IP addresses
+or names resolvable from the public network can be used to address the destination.
 
 ### third party
 
-- services results
-- real world limitations on TCP
+#### No TURN relays
+
+In the course of our testing, b
+oth Zoom and Google Meet do not appear to use TURN relays
+for their videoconferencing products.
+As such, there is nothing to test.
+
+#### Restricted TURN relays
+
+Cisco provides an online test instance for their Webex videoconferencing solution.
+From this we were able to extract a hardcoded set of TURN credentials:
+`ciscoThinClient / 1234abcd`.
+Connecting to and allocating a port completed successfully for both TCP and UDP,
+however, any further requests would be dropped,
+resulting in timeouts and no usable connection.
+
+Citrix offers GoToMeeting as their web conferencing product.
+This also uses a set of hardcoded credentials: `citrixturnuser / turnpassword`.
+Connecting succeeds,
+but allocations fail with with an error
+stating `Wrong Transport Field` for both TCP and UDP.
+More investigation would be needed to determine the transport field it uses,
+but even so it would be considerably less useful for proxying arbitrary connections.
+
+Slack has calls within its main product.
+Enable Security had previously successfully connected to Slack's TURN relays,
+however, since then, they have presumably fixed the issue
+and announced a migration to Amazon Chime, Amazon's hosted communications service.
+At the time of testing, the TURN servers exposed were Amazon Chime servers,
+which only allowed UDP allocations,
+but restricted making connections to outside addresses.
+Further testing would be needed to identify unrestricted addresses.
+
+#### UDP TURN Relays
+
+Microsoft Teams, Jitsi Meet, BlueJeans, Facebook Messenger,
+and Riot.im (a Matrix client)
+all had TURN relays that allowed UDP connections to the public internet.
+None of them had TCP support enabled,
+and all used credentials generated on demand with short validity periods.
+These services used various methods to convey the generated credentials to clients,
+such as in cookies for Microsoft Teams
+and in XMPP messages over WebSockets for Jitsi Meet.
 
 ### defense
+
+For the operator of a TURN relay,
+there are many options in building a multilayered defense against potential abuse.
 
 ### RQs
 
@@ -257,9 +320,16 @@ would be unavoidable if stable long term credentials are desired.
 
 ## future work
 
-- live off the land
-- hacking tools integration
-- stability, ipv6
+Additional points of improvement would be in stability and feature support,
+such as for IPv6 or passing domain names.
+These are not protocol limitations but implementation limitations.
+As a statically linked binary,
+our proof of concept sizes up to be 16MiB uncompressed
+and 4.1MiB after stripping and packing.
+An alternative to shipping a large binary
+would be to make use of existing programs such as
+browsers or videoconferencing clients
+which likely already include most of the code needed.
 
 ## references
 

@@ -14,6 +14,7 @@ type ForwardProxy struct {
 	Proxy
 
 	server *socks5.Server
+	cancel context.CancelFunc
 
 	// udp
 	uonce  sync.Once
@@ -31,6 +32,8 @@ func NewForwardProxy(p *Proxy) *ForwardProxy {
 
 // Run starts a SOCKS5 server, forwarding TCP and UDP connections through the TURN relay
 func (f *ForwardProxy) Run(ctx context.Context) {
+	ctx, f.cancel = context.WithCancel(ctx)
+
 	var err error
 	f.server, err = socksServer(f.Proxy.socksAddress)
 	if err != nil {
@@ -65,6 +68,7 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 		// connect to relay
 		client, relay, err := f.Proxy.connectTCP(r.Address())
 		if err != nil {
+			f.cancel()
 			return err
 		}
 		defer client.Close()
@@ -98,6 +102,7 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 			return err
 		}
 		return nil
+
 	default:
 		return socks5.ErrUnsupportCmd
 	}
@@ -144,6 +149,7 @@ func (f *ForwardProxy) initUDP() {
 	_, f.uconn, err = f.Proxy.connectUDP()
 	if err != nil {
 		log.Printf("forward: initUDP: %v", err)
+		f.cancel()
 		return
 	}
 
