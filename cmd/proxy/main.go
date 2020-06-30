@@ -187,7 +187,7 @@ func (p *Proxy) connectTCP(dst string) (*turn.Client, net.Conn, error) {
 	}
 
 	fmt.Printf("TURN mapped %s/%s -> %s/%s\n",
-		"???", "???",
+		"tcp", "???",
 		// dataConn.LocalAddr().Network(), dataConn.LocalAddr().String(),
 		"tcp", relayConn.LocalAddr().String(),
 	)

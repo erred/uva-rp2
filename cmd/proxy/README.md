@@ -56,7 +56,7 @@ SOCKS5 listening tcp/127.0.0.1:1080 udp/127.0.0.1:1080
 # we don't actually know our reflexive address
 # mapped proxy-reflexive-addr -> TURN-allocated-addr
 # Handling client-source-addr -> client-dest-addr
-TURN mapped ???/??? -> tcp/145.100.104.117:64729
+TURN mapped tcp/??? -> tcp/145.100.104.117:64729
 Handling tcp/127.0.0.1:52646 -> tcp/104.196.203.254:5678
 
 # UDP
