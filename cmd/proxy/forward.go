@@ -17,16 +17,15 @@ type ForwardProxy struct {
 	cancel context.CancelFunc
 
 	// udp
-	uonce  sync.Once
-	uconn  net.PacketConn
-	ul     sync.Mutex
-	uconns map[string]*PacketConn
+	sl sync.Mutex
+	// source -> udpSession
+	sconns map[string]*udpSession
 }
 
 func NewForwardProxy(p *Proxy) *ForwardProxy {
 	return &ForwardProxy{
 		Proxy:  *p,
-		uconns: make(map[string]*PacketConn),
+		sconns: make(map[string]*udpSession),
 	}
 }
 
@@ -110,33 +109,35 @@ func (f *ForwardProxy) TCPHandle(s *socks5.Server, source *net.TCPConn, r *socks
 
 // UDPHandle satisfies socks.Handler
 func (f *ForwardProxy) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks5.Datagram) error {
-	f.uonce.Do(f.initUDP)
+	f.sl.Lock()
+	uSess := f.sconns[source.String()]
+	f.sl.Unlock()
+	if uSess == nil {
+		_, conn, err := f.Proxy.connectUDP()
+		if err != nil {
+			f.cancel()
+			return err
+		}
+
+		uSess = &udpSession{
+			dconn: conn,
+			sconn: f.server.UDPConn,
+			saddr: source,
+		}
+
+		f.sl.Lock()
+		f.sconns[source.String()] = uSess
+		f.sl.Unlock()
+
+		go uSess.handleIncoming()
+	}
 
 	dstAddr, err := net.ResolveUDPAddr("udp4", d.Address())
 	if err != nil {
 		return fmt.Errorf("UDPHandle resolve: %w", err)
 	}
 
-	f.ul.Lock()
-	c := f.uconns[dstAddr.String()]
-	f.ul.Unlock()
-
-	if c == nil {
-		c = &PacketConn{
-			source,
-			dstAddr,
-		}
-
-		f.ul.Lock()
-		f.uconns[dstAddr.String()] = c
-		f.ul.Unlock()
-
-		fmt.Printf("Handling %s/%s -> %s/%s\n",
-			source.Network(), source.String(), dstAddr.Network(), dstAddr.String(),
-		)
-	}
-
-	_, err = f.uconn.WriteTo(d.Bytes(), c.destination)
+	_, err = uSess.dconn.WriteTo(d.Bytes(), dstAddr)
 	if err != nil {
 		return fmt.Errorf("UDPHandle write: %w", err)
 	}
@@ -144,50 +145,34 @@ func (f *ForwardProxy) UDPHandle(s *socks5.Server, source *net.UDPAddr, d *socks
 	return nil
 }
 
-func (f *ForwardProxy) initUDP() {
-	var err error
-	_, f.uconn, err = f.Proxy.connectUDP()
+type udpSession struct {
+	// TURN connection
+	dconn net.PacketConn
+	// Client connection
+	sconn *net.UDPConn
+	saddr *net.UDPAddr
+}
+
+func (u *udpSession) handleIncoming() {
+	a, addr, port, err := socks5.ParseAddress(u.saddr.String())
 	if err != nil {
-		log.Printf("forward: initUDP: %v", err)
-		f.cancel()
+		log.Printf("forward: handleIncoming parse: %v", err)
 		return
 	}
 
-	go f.handleIncoming()
-}
-
-func (f *ForwardProxy) handleIncoming() {
 	buf := make([]byte, 65536)
 	for {
-		n, from, err := f.uconn.ReadFrom(buf)
+		n, _, err := u.dconn.ReadFrom(buf)
 		if err != nil {
 			log.Printf("forward: handleIncoming read: %v", err)
 			return
 		}
 
-		f.ul.Lock()
-		c := f.uconns[from.String()]
-		f.ul.Unlock()
-		if c == nil {
-			continue
-		}
-
-		a, addr, port, err := socks5.ParseAddress(c.source.String())
-		if err != nil {
-			log.Printf("forward: handleIncoming parse: %v", err)
-			return
-		}
-
 		d := socks5.NewDatagram(a, addr, port, buf[:n])
-		_, err = f.server.UDPConn.WriteToUDP(d.Bytes(), c.source)
+		_, err = u.sconn.WriteToUDP(d.Bytes(), u.saddr)
 		if err != nil {
 			log.Printf("forward: handleIncoming write: %v", err)
 			return
 		}
 	}
-}
-
-type PacketConn struct {
-	source      *net.UDPAddr
-	destination *net.UDPAddr
 }

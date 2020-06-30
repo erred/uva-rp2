@@ -8,9 +8,15 @@ notes: error handling is not good
 go build
 ```
 
+fully static stripped build
+
+```sh
+CGO_ENABLED=0 go build -ldflags "-s -w"
+```
+
 ## general limitations
 
-no clean shutdown / timeout of connections (resource leak)
+no clean shutdown
 
 ## run
 
@@ -22,9 +28,8 @@ Effectively uses the TURN relay as a forward proxy.
 
 #### limitations
 
-- TCP refreshes not implemented
-- opens new TURN session for every TCP connection (allows retargeting same destination without waiting for timeout)
-- reuses same TURN session for all UDP connections (multiple udp clients cannot target same destination, replies are all sent to first client)
+- opens a new TURN session per client connection (keyed by client proto + host + port),
+  may run into TURN relay session limits
 
 #### example
 
@@ -69,7 +74,7 @@ Starts a SOCKS proxy per incoming connection.
 #### limitations
 
 - only uses UDP (should not actually cause issues, this part runs over public internet)
-- possible race condition on localPort?
+- SOCKS library does not support domain destinations
 
 #### example
 
