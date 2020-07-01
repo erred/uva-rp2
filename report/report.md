@@ -93,7 +93,7 @@ These are the cases in which peer connections are advantageous due to lower late
 as well as lower processing and bandwidth costs for the service operator.
 It is also for this reason that authentication is mandatory to support TURN.
 TURN allocations are time limited (10 minutes by default)
-with the option to refresh, but no option to terminate early.
+with the option to refresh.
 
 For UDP connections to a destination,
 clients can connect to the relay over UDP or TCP, or their secured variants, DTLS or TLS.
@@ -268,8 +268,7 @@ This is a general limitation with Go programs in general.
 
 #### No TURN relays
 
-In the course of our testing, b
-oth Zoom and Google Meet do not appear to use TURN relays
+In the course of our testing, both Zoom and Google Meet do not appear to use TURN relays
 for their videoconferencing products.
 As such, there is nothing to test.
 
@@ -284,8 +283,7 @@ resulting in timeouts and no usable connection.
 
 Citrix offers GoToMeeting as their web conferencing product.
 This also uses a set of hardcoded credentials: `citrixturnuser / turnpassword`.
-Connecting succeeds,
-but allocations fail with with an error
+Connecting succeeds, but allocations fail with with an error
 stating `Wrong Transport Field` for both TCP and UDP.
 More investigation would be needed to determine the transport field it uses,
 but even so it would be considerably less useful for proxying arbitrary connections.
@@ -297,7 +295,7 @@ and announced a migration to Amazon Chime, Amazon's hosted communications servic
 At the time of testing, the TURN servers exposed were Amazon Chime servers,
 which only allowed UDP allocations,
 but restricted making connections to outside addresses.
-Further testing would be needed to identify unrestricted addresses.
+Further testing would be needed to identify unrestricted address ranges.
 
 #### UDP TURN Relays
 
