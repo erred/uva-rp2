@@ -51,12 +51,44 @@ and a modified client-server pair to deduplicate scanning traffic.
 This differs from the approach in this paper,
 which uses unmodified and potentially third party TURN relays for NAT traversal.
 
-The only notable publicised instance of using TURN relays as a proxy
+The only other notable publicised instance of using TURN relays as a proxy
 is an April 2020 report by Enable Security
-outlining misconfiguration of Slack's TURN relays
-and their internal proxying tool \cite{slack}.
+outlining misconfiguration of Slack's TURN relays.
+They used an internal tool
+to proxy both TCP and UDP connections through Slack's TURN relays \cite{slack}.
 
 ## research question
+
+The aim of this research is to implement and test ideas
+for using third party TURN relays as proxies,
+exposing the functionality as a SOCKS proxy.
+There are two main appriaches we will take:
+a forward translation layer and a reverse connection through a TURN relay.
+
+The forwarding approach translates a SOCKS connection request
+into a TURN connection request,
+with the TURN relay making the final connection to the destination.
+This acts mainly as a test of TURN relay capabilities and (mis)configuration.
+This is very similar to what Enable Security have done,
+with the main blocker being the lack of public libraries
+that support the full range of TURN specifications
+and capabilities implemented by relays.
+
+The reverse connection will be of more interest to red teaming operations.
+For practical reasons,
+the TURN relays operated by major business software services providers
+are often whitelisted in firewalls.
+This presents the opportunity to pass connections through these relays,
+masking their true destination and opening up protected networks to outside connections.
+This is superficially similar to what CloudProxy did,
+however, that project only used the protocol and not known endpoints to bypass NATs.
+
+In short:
+
+- Implement and test limitations of SOCKS to TURN translation layer.
+- Implement and test limitations of tunnelling connections through TURN relays
+  for purposes of bypassing network restrictions.
+- Identify methods of preventing abuse for both network and TURN relay operators.
 
 ## background
 
@@ -197,6 +229,9 @@ To multiplex multiple connections over a single TURN session/connection,
 we use QUIC.
 QUIC is a transport protocol on top of UDP, originally designed by Google
 and currently undergoing standardiztion at the IETF.
+With QUIC implementations already running for browsers (Firefox, Chrome),
+servers (Nginx), and cloud providers (Google, Cloudlfare) as part of HTTP/3,
+QUIC is likely to remain well supported for some time to come.
 This gives us multiplexed, bidirectional streams between the proxy and server.
 
 On top of QUIC, a lightweight messaging protocol is used.
@@ -310,10 +345,49 @@ and in XMPP messages over WebSockets for Jitsi Meet.
 
 ### defense
 
+For the operator of a secured network,
+there is unfortunately not a lot that can be done
+with regards to blocking unwanted connections.
+Deep packet inspection and network flow analysis may offer some insight,
+though self signed and pinned certificates
+in many legitimate applications will limit their usefulness.
+Previously, RFC ... did specify the possibility of discovering local STUN/TURN relays
+through DNS, giving operators control over outgoing connections,
+though is is unclear if any clients actually support it.
+
 For the operator of a TURN relay,
 there are many options in building a multilayered defense against potential abuse.
 
-### RQs
+First would be hiding the relays.
+A simple method is running the relays with non standard ports,
+something that may already to done to bypass pesky firewalls.
+More involved would be only running the secured variants of the underlying transport,
+DTLS or TLS, and using Server Name Indication (SNI) to route traffic.
+This would prevent casual scans based on the IP address
+from learning the existence of relays,
+but would do nothing against more targeted approach,
+as used earlier.
+
+The next line of defense is authentication.
+Despite its name, the "long-term credentials" in TURN
+are often only valid for a short period and generated on demand.
+While there were recommendations
+on how to relay these generated credentials to clients,
+there is no standard and each service does it in their own way,
+requiring reverse engineering of the credential exchange mechanism for each service.
+In the future, OAUTH tokens may be used, standardizing authentication flows.
+
+A final line of defense rests with authorization,
+the TURN operator should limit access to destinations as necessary,
+including limiting the protocol, address ranges, and possibly port ranges,
+as in normal use clients should only be connecting to and from ephemereal ports.
+
+As a side note, TURN relays are used primarily as a fallback to peer to peer connections.
+Due to bandwidth and other concerns,
+this typically limits the service to approximately a dozen peers.
+Scaling beyond this would require central media servers such as
+MCUs (Multipoint Conferencing Unit) or SFUs (Selective Forwarding Unit).
+If this approach is taken, a TURN relay should not be necessary.
 
 ## conclusion
 
