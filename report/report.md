@@ -100,7 +100,7 @@ clients can connect to the relay over UDP or TCP, or their secured variants, DTL
 Since STUN messages contain a length field,
 they can be transmitted over a reliable stream without issue.
 Clients can then send an `Allocate` request,
-allocating a port on the relay for communications.
+allocating a UDP port on the relay for communications.
 The client can then send data with `Send`,
 containing both the destination and the data.
 Alternatively, clients can request a channel with `ChannelBind`
@@ -110,7 +110,7 @@ and using just a 4 byte ID for a lower overhead method of communications.
 For TCP connections,
 clients first connect to the relay with either TCP or TLS,
 establishing a control connection.
-As with UDP, an `Allocate` request allocates a port.
+As with UDP, an `Allocate` request allocates a (TCP) port.
 The client can then send a `Connect` request with the intended destination.
 If the relay connects successfully, it will reply with a `CONNECTION-ID`.
 The client can then open a separate data connection to the relay,
@@ -119,7 +119,7 @@ with a `ConnectionBind` including the `CONNECTION-ID`.
 All further data on the data connection
 is then relayed between the client and destination without modification.
 
-Specification wise, RFC 5766 for TURN only specifies support for UDP,
+Specification wise, RFC 5766 for TURN only specifies support for UDP allocations,
 given the intended use case for audio/video communications.
 TCP support was added in RFC 6062.
 
@@ -148,8 +148,11 @@ based on the existing framework,
 the availability of other protocols for later parts,
 and the author's familiarity with the Go language.
 As a proof of concept,
-the code is relatively straightforward and available upstream on the `rfc6062` branch.
-However, API design issues mean it cannot yet be integrated into a mainline release.
+the code is a relatively straightforward implementation of the RFC,
+reusing large parts of the code already existing for UDP communications,
+and is available upstream on the `rfc6062` branch.
+However, there remains API design issues,
+which are a blocker for merging into the main release.
 
 ### forward
 
@@ -164,22 +167,19 @@ is when a client first establishes a TCP control connection to the proxy.
 However, due to various limitations,
 such as poorly behaving client or server library restrictions,
 it may not be possible to associate client UDP packets with a TCP session.
-For this reason, a TURN session is started on demand upon an incoming client UDP packet.
-All UDP packets then share the same TURN session,
-this, along with the fact that TURN does not allow the closing of connections,
-means that allocations will slowly leak.
-Additionally, due to the shared session and connectionless nature of UDP,
-multiple clients cannot connect to the same destination
-as there is no way to determine the intended destination of a returning packet.
-With additional complexity and performance costs,
-this restriction can be lifted
-by starting new TURN sessions keyed by client source addresses.
+For this reason,
+a new TURN session is started on demand upon an incoming client UDP packet,
+keyed by the client's source address.
+However, this may slowly leak sessions
+as the aforementioned inability to associate with control channels means
+there is no point at which the session can be safely shut down.
 
 For TCP, a TURN session can be started per SOCKS connection,
 and the connection oriented nature means it is much more straightforward to
 relay the packets.
-However, this approach may run into per user session quotas
-if the TURN relay has it configured.
+However, this approach may run into per user session quotas,
+if the TURN relay has it configured,
+earlier than UDP as there is absolutely no session reuse.
 
 ### reverse
 
@@ -245,13 +245,8 @@ as it only relies on well tested library code.
 ### limitations
 
 There are serveral issues with the implementation,
-such as the aforementioned session / allocation leakage
-and UDP return path issues,
+such as the session reuse and allocation leakage mentioned earlier,
 as well as a lack of graceful error handling.
-Additionally, refreshes for TCP allocations was not implemented,
-leading to a maximum lifetime of 10 minutes for TCP connections.
-This may not be an issue for short lived HTTP requests,
-but may be for longer lived connections such as those for SSH.
 
 Another limitation is with domain names.
 In the forwarding configuration,
@@ -262,6 +257,12 @@ In the reverse configuration, this is only limited by the SOCKS library,
 and a different implementation would not have this restriction.
 As a result of the above, only raw IP addresses
 or names resolvable from the public network can be used to address the destination.
+
+As a practical issue for red teaming operations,
+the statically linked final binary weighs in at 16MiB,
+this can be reduced to 4.1MiB by stripping out debug symbols and packing with `upx`,
+but it is still a large executabe.
+This is a general limitation with Go programs in general.
 
 ### third party
 

@@ -1,9 +1,8 @@
-# uva-rp2
+# SOCKS over TURN
 
-A repo for uva-rp2
+UvA / SNE/OS3 / RP2
 
 [![License](https://img.shields.io/github/license/seankhliao/uva-rp2.svg?style=flat-square)](LICENSE)
-![Version](https://img.shields.io/github/v/tag/seankhliao/uva-rp2?sort=semver&style=flat-square)
 
 ## ToDo
 
@@ -14,22 +13,13 @@ A repo for uva-rp2
 - [x] questions / scope
 - [x] write proposal
 - [x] evaluate coturn turnutils
-- [ ] implement rfc6062?
-- [ ] identify "public" TURN servers
+- [x] implement rfc6062
+- [x] identify TURN servers
+- [x] presentation1
+- [ ] report
+- [ ] presentation2
 
 https://medium.com/tenable-techblog/using-webrtc-ice-servers-for-port-scanning-in-chrome-ce17b19dd474
-
-### scoping
-
-- proxy protocol: socks5
-- implement rfc6062
-- angle research question?
-  - in-out or out-in?
-  - security? defense? attack?
-- repo public? license?
-- integration with something else? metasploit?
-- extract TURN auth?
-- socks 5 udp?
 
 ## Basics
 
@@ -95,6 +85,7 @@ drafts
 - [armon/go-socks5](https://github.com/armon/go-socks5) SOCKS5
 - [cybozu-go/usocksd](https://github.com/cybozu-go/usocksd) SOCKS4/5
 - [fangdingjun/socks-go](https://github.com/fangdingjun/socks-go) SOCKS4/5
+- [txthinking/socks5](https://github.com/txthinking/socks5) SOCKS5
 
 - [net/http/httputil](https://golang.org/pkg/net/http/httputil) HTTP Reverse Proxy
 - [elazarl/goproxy](https://github.com/elazarl/goproxy) HTTP Proxy
@@ -102,14 +93,4 @@ drafts
 ### Notes
 
 - Enable Security [slack hack](https://www.rtcsec.com/2020/04/01-slack-webrtc-turn-compromise/)
-
 - draft [TURN over WebSocket](https://tools.ietf.org/html/draft-chenxin-behave-turn-websocket-01)
-
-#### coturn
-
-- TURN port: 3478
-- TURN TLS port: 5349
-- min port: 49152
-- max port: 65535
-- user: turnpike
-- pass: turnpike
